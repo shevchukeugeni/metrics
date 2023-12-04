@@ -35,9 +35,11 @@ func main() {
 						log.Println(err)
 					}
 
-					_, err = http.DefaultClient.Do(req)
+					res, err := http.DefaultClient.Do(req)
 					if err != nil {
 						log.Println(err)
+					} else {
+						res.Body.Close()
 					}
 				}
 
@@ -47,9 +49,11 @@ func main() {
 						log.Println(err)
 					}
 
-					_, err = http.DefaultClient.Do(req)
+					res, err := http.DefaultClient.Do(req)
 					if err != nil {
 						log.Println(err)
+					} else {
+						res.Body.Close()
 					}
 				}
 
