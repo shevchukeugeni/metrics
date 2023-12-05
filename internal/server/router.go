@@ -57,7 +57,7 @@ func (ro *router) updateMetric(w http.ResponseWriter, r *http.Request) {
 	}
 
 	path := strings.TrimPrefix(r.URL.Path, "/update/")
-	if len(path) == 0 {
+	if len(path) == 0 || path == "counter/" || path == "gauge/" {
 		http.Error(w, "incorrect metric name", http.StatusNotFound)
 		return
 	}

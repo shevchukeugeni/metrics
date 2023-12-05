@@ -36,10 +36,10 @@ func main() {
 					}
 
 					res, err := http.DefaultClient.Do(req)
+					defer res.Body.Close()
+
 					if err != nil {
 						log.Println(err)
-					} else {
-						res.Body.Close()
 					}
 				}
 
@@ -50,10 +50,10 @@ func main() {
 					}
 
 					res, err := http.DefaultClient.Do(req)
+					defer res.Body.Close()
+
 					if err != nil {
 						log.Println(err)
-					} else {
-						res.Body.Close()
 					}
 				}
 
