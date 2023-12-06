@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"github.com/stretchr/testify/require"
 	"testing"
 )
 
@@ -198,6 +199,9 @@ func TestMemStorage_UpdateMetric(t *testing.T) {
 			if err := ms.UpdateMetric(tt.args.mtype, tt.args.name, tt.args.value); (err != nil) != tt.wantErr {
 				t.Errorf("UpdateMetric() error = %v, wantErr %v", err, tt.wantErr)
 			}
+
+			require.Equal(t, ms.GetMetric("gauge"), tt.fields.Metrics["gauge"].Get())
+			require.Equal(t, ms.GetMetric("counter"), tt.fields.Metrics["counter"].Get())
 		})
 	}
 }

@@ -2,6 +2,7 @@ package utils
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
 
 	"github.com/shevchukeugeni/metrics/internal/types"
@@ -20,6 +21,15 @@ func NewMemStorage() *MemStorage {
 	}
 }
 
+func (ms *MemStorage) GetMetric(mtype string) map[string]string {
+	metric, ok := ms.Metrics[mtype]
+	if !ok {
+		return nil
+	} else {
+		return metric.Get()
+	}
+}
+
 func (ms *MemStorage) GetMetrics() map[string]Metric {
 	return ms.Metrics
 }
@@ -34,10 +44,20 @@ func (ms *MemStorage) UpdateMetric(mtype, name, value string) error {
 }
 
 type Metric interface {
+	Get() map[string]string
 	Update(name, value string) error
 }
 
 type Gauge map[string]float64
+
+func (g Gauge) Get() map[string]string {
+	strMap := make(map[string]string)
+	for k, v := range g {
+		strMap[k] = fmt.Sprint(v)
+	}
+
+	return strMap
+}
 
 func (g Gauge) Update(name, value string) error {
 	fValue, err := strconv.ParseFloat(value, 64)
@@ -55,7 +75,16 @@ func (g Gauge) Update(name, value string) error {
 
 type Counter map[string]int64
 
-func (g Counter) Update(name, value string) error {
+func (c Counter) Get() map[string]string {
+	strMap := make(map[string]string)
+	for k, v := range c {
+		strMap[k] = fmt.Sprint(v)
+	}
+
+	return strMap
+}
+
+func (c Counter) Update(name, value string) error {
 	iValue, err := strconv.ParseInt(value, 10, 64)
 	if err != nil {
 		return err
@@ -65,6 +94,6 @@ func (g Counter) Update(name, value string) error {
 		return errors.New("incorrect name")
 	}
 
-	g[name] += iValue
+	c[name] += iValue
 	return nil
 }

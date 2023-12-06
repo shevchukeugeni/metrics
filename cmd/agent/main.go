@@ -3,12 +3,12 @@ package main
 import (
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	"github.com/go-resty/resty/v2"
 	"github.com/shevchukeugeni/metrics/internal/utils"
 )
 
@@ -21,6 +21,8 @@ func main() {
 	pollTicker := time.NewTicker(pollInterval)
 	reportTicker := time.NewTicker(reportInterval)
 
+	client := resty.New()
+
 	go func() {
 		for {
 			select {
@@ -30,32 +32,22 @@ func main() {
 				log.Println("Metrics are updated")
 			case <-reportTicker.C:
 				for k, v := range metrics.Gauge {
-					req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("http://localhost:8080/update/gauge/%s/%s", k, v), nil)
+					_, err := client.R().SetPathParams(map[string]string{
+						"name":  k,
+						"value": v,
+					}).Post("http://localhost:8080/update/gauge/{name}/{value}")
 					if err != nil {
 						log.Println(err)
-					}
-
-					res, err := http.DefaultClient.Do(req)
-
-					if err != nil {
-						log.Println(err)
-					} else {
-						res.Body.Close()
 					}
 				}
 
 				for k, v := range metrics.Counter {
-					req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("http://localhost:8080/update/counter/%s/%v", k, v), nil)
+					_, err := client.R().SetPathParams(map[string]string{
+						"name":  k,
+						"value": fmt.Sprint(v),
+					}).Post("http://localhost:8080/update/counter/{name}/{value}")
 					if err != nil {
 						log.Println(err)
-					}
-
-					res, err := http.DefaultClient.Do(req)
-
-					if err != nil {
-						log.Println(err)
-					} else {
-						res.Body.Close()
 					}
 				}
 

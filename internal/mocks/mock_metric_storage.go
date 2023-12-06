@@ -34,6 +34,20 @@ func (m *MockMetricStorage) EXPECT() *MockMetricStorageMockRecorder {
 	return m.recorder
 }
 
+// GetMetric mocks base method.
+func (m *MockMetricStorage) GetMetric(arg0 string) map[string]string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetMetric", arg0)
+	ret0, _ := ret[0].(map[string]string)
+	return ret0
+}
+
+// GetMetric indicates an expected call of GetMetric.
+func (mr *MockMetricStorageMockRecorder) GetMetric(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetric", reflect.TypeOf((*MockMetricStorage)(nil).GetMetric), arg0)
+}
+
 // GetMetrics mocks base method.
 func (m *MockMetricStorage) GetMetrics() map[string]utils.Metric {
 	m.ctrl.T.Helper()
