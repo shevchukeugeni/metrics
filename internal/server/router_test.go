@@ -212,7 +212,7 @@ func Test_router_getMetric(t *testing.T) {
 		}).Times(1)
 	mockStorage.EXPECT().GetMetric("gauge").Return(
 		map[string]string{
-			"test2": "2",
+			"test2": "2.22",
 		}).Times(2)
 
 	ts := httptest.NewServer(SetupRouter(mockStorage))
@@ -230,7 +230,7 @@ func Test_router_getMetric(t *testing.T) {
 			target: "/value/counter/test1",
 			want: want{
 				code:        200,
-				response:    "test1: 1",
+				response:    "1",
 				contentType: "text/plain; charset=utf-8",
 			},
 		},
@@ -240,7 +240,7 @@ func Test_router_getMetric(t *testing.T) {
 			target: "/value/gauge/test2",
 			want: want{
 				code:        200,
-				response:    "test2: 2",
+				response:    "2.22",
 				contentType: "text/plain; charset=utf-8",
 			},
 		},

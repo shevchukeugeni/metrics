@@ -119,7 +119,7 @@ func (ro *router) getMetric(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	fmt.Fprintf(w, "%s: %s", name, value)
+	fmt.Fprint(w, value)
 }
 
 func (ro *router) updateMetric(w http.ResponseWriter, r *http.Request) {
