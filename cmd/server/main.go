@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"log"
 	"net/http"
 
@@ -8,12 +9,21 @@ import (
 	"github.com/shevchukeugeni/metrics/internal/utils"
 )
 
+var flagRunAddr string
+
+func init() {
+	flag.StringVar(&flagRunAddr, "a", "localhost:8080", "address and port to run server")
+}
+
 func main() {
+	flag.Parse()
+
 	memStorage := utils.NewMemStorage()
 
 	router := server.SetupRouter(memStorage)
 
-	err := http.ListenAndServe(":8080", router)
+	log.Println("Running server on", flagRunAddr)
+	err := http.ListenAndServe(flagRunAddr, router)
 	if err != nil {
 		log.Fatal(err)
 	}

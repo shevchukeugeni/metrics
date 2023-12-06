@@ -1,8 +1,10 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"os/signal"
 	"syscall"
@@ -12,14 +14,29 @@ import (
 	"github.com/shevchukeugeni/metrics/internal/utils"
 )
 
-const pollInterval = 2 * time.Second
-const reportInterval = 10 * time.Second
+var (
+	flagRunAddr                  string
+	pollInterval, reportInterval int
+)
+
+func init() {
+	flag.StringVar(&flagRunAddr, "a", "localhost:8080", "address and port to run server")
+	flag.IntVar(&reportInterval, "r", 10, "report interval in seconds")
+	flag.IntVar(&pollInterval, "p", 2, "poll interval in econds")
+}
 
 func main() {
+	flag.Parse()
+
+	_, err := net.DialTimeout("tcp", flagRunAddr, 1*time.Second)
+	if err != nil {
+		log.Fatalf("%s %s %s\n", flagRunAddr, "not responding", err.Error())
+	}
+
 	metrics := utils.NewRuntimeMetrics()
 
-	pollTicker := time.NewTicker(pollInterval)
-	reportTicker := time.NewTicker(reportInterval)
+	pollTicker := time.NewTicker(time.Duration(pollInterval) * time.Second)
+	reportTicker := time.NewTicker(time.Duration(reportInterval) * time.Second)
 
 	client := resty.New()
 
@@ -35,7 +52,7 @@ func main() {
 					_, err := client.R().SetPathParams(map[string]string{
 						"name":  k,
 						"value": v,
-					}).Post("http://localhost:8080/update/gauge/{name}/{value}")
+					}).Post("http://" + flagRunAddr + "/update/gauge/{name}/{value}")
 					if err != nil {
 						log.Println(err)
 					}
