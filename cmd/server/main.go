@@ -4,6 +4,7 @@ import (
 	"flag"
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/shevchukeugeni/metrics/internal/server"
 	"github.com/shevchukeugeni/metrics/internal/utils"
@@ -13,6 +14,10 @@ var flagRunAddr string
 
 func init() {
 	flag.StringVar(&flagRunAddr, "a", "localhost:8080", "address and port to run server")
+
+	if envRunAddr := os.Getenv("ADDRESS"); envRunAddr != "" {
+		flagRunAddr = envRunAddr
+	}
 }
 
 func main() {

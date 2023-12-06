@@ -9,23 +9,33 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/caarlos0/env/v6"
 	"github.com/go-resty/resty/v2"
+
 	"github.com/shevchukeugeni/metrics/internal/utils"
 )
 
-var (
-	flagRunAddr                  string
-	pollInterval, reportInterval int
-)
+type Config struct {
+	ServerAddr     string `env:"ADDRESS"`
+	PollInterval   int    `env:"REPORT_INTERVAL"`
+	ReportInterval int    `env:"POLL_INTERVAL"`
+}
+
+var cfg Config
 
 func init() {
-	flag.StringVar(&flagRunAddr, "a", "localhost:8080", "address and port to run server")
-	flag.IntVar(&reportInterval, "r", 10, "report interval in seconds")
-	flag.IntVar(&pollInterval, "p", 2, "poll interval in econds")
+	flag.StringVar(&cfg.ServerAddr, "a", "localhost:8080", "address and port to run server")
+	flag.IntVar(&cfg.ReportInterval, "r", 10, "report interval in seconds")
+	flag.IntVar(&cfg.PollInterval, "p", 2, "poll interval in seconds")
 }
 
 func main() {
 	flag.Parse()
+
+	err := env.Parse(&cfg)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	// NOTE: I think it's necessary to check, but autotests suite fails then
 	//_, err := net.DialTimeout("tcp", flagRunAddr, 1*time.Second)
@@ -35,8 +45,8 @@ func main() {
 
 	metrics := utils.NewRuntimeMetrics()
 
-	pollTicker := time.NewTicker(time.Duration(pollInterval) * time.Second)
-	reportTicker := time.NewTicker(time.Duration(reportInterval) * time.Second)
+	pollTicker := time.NewTicker(time.Duration(cfg.PollInterval) * time.Second)
+	reportTicker := time.NewTicker(time.Duration(cfg.ReportInterval) * time.Second)
 
 	client := resty.New()
 
@@ -52,7 +62,7 @@ func main() {
 					_, err := client.R().SetPathParams(map[string]string{
 						"name":  k,
 						"value": v,
-					}).Post("http://" + flagRunAddr + "/update/gauge/{name}/{value}")
+					}).Post(fmt.Sprintf("http://%s/update/gauge/{name}/{value}", cfg.ServerAddr))
 					if err != nil {
 						log.Println(err)
 					}
@@ -62,7 +72,7 @@ func main() {
 					_, err := client.R().SetPathParams(map[string]string{
 						"name":  k,
 						"value": fmt.Sprint(v),
-					}).Post("http://localhost:8080/update/counter/{name}/{value}")
+					}).Post(fmt.Sprintf("http://%s/update/gauge/{name}/{value}", cfg.ServerAddr))
 					if err != nil {
 						log.Println(err)
 					}
