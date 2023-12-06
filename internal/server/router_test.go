@@ -119,6 +119,7 @@ func Test_router_updateMetric(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			res, body := testRequest(t, ts, tt.method, tt.target)
+			defer res.Body.Close()
 			assert.Equal(t, tt.want.code, res.StatusCode)
 
 			if tt.want.emptyResponse {
@@ -183,6 +184,7 @@ func Test_router_getMetrics(t *testing.T) {
 			defer ts.Close()
 
 			res, body := testRequest(t, ts, tt.method, "/")
+			defer res.Body.Close()
 			assert.Equal(t, tt.want.code, res.StatusCode)
 
 			assert.Equal(t, tt.want.response, body)
@@ -276,6 +278,8 @@ func Test_router_getMetric(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			res, body := testRequest(t, ts, tt.method, tt.target)
+			defer res.Body.Close()
+
 			assert.Equal(t, tt.want.code, res.StatusCode)
 			assert.Equal(t, tt.want.response, body)
 			assert.Equal(t, tt.want.contentType, res.Header.Get("Content-Type"))
@@ -290,7 +294,6 @@ func testRequest(t *testing.T, ts *httptest.Server, method,
 
 	resp, err := ts.Client().Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
