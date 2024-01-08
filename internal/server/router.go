@@ -5,8 +5,10 @@ import (
 	"html/template"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
+	"go.uber.org/zap"
 
 	"github.com/shevchukeugeni/metrics/internal/store"
 	"github.com/shevchukeugeni/metrics/internal/types"
@@ -34,7 +36,8 @@ const tpl = `
 </html>`
 
 type router struct {
-	ms MetricStorage
+	logger *zap.Logger
+	ms     MetricStorage
 }
 
 type MetricStorage interface {
@@ -43,15 +46,17 @@ type MetricStorage interface {
 	UpdateMetric(mtype, name, value string) error
 }
 
-func SetupRouter(ms MetricStorage) http.Handler {
+func SetupRouter(logger *zap.Logger, ms MetricStorage) http.Handler {
 	ro := &router{
-		ms: ms,
+		logger: logger,
+		ms:     ms,
 	}
 	return ro.Handler()
 }
 
 func (ro *router) Handler() http.Handler {
 	r := chi.NewRouter()
+	r.Use(ro.WithLogging)
 	r.Get("/", ro.getMetrics)
 	r.Get("/value/{mType}/{name}", ro.getMetric)
 	r.Post("/update/{mType}/{name}/{value}", ro.updateMetric)
@@ -142,4 +147,33 @@ func (ro *router) updateMetric(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
+}
+
+func (ro *router) WithLogging(h http.Handler) http.Handler {
+	logFn := func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+
+		responseData := &responseData{
+			status: 0,
+			size:   0,
+		}
+		lw := LoggingResponseWriter{
+			ResponseWriter: w,
+			responseData:   responseData,
+		}
+		h.ServeHTTP(&lw, r)
+
+		duration := time.Since(start)
+
+		ro.logger.Sugar().Infoln(
+			"uri", r.RequestURI,
+			"method", r.Method,
+			"duration", duration,
+			"status", responseData.status,
+			"size", responseData.size,
+		)
+
+	}
+
+	return http.HandlerFunc(logFn)
 }

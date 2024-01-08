@@ -2,9 +2,10 @@ package main
 
 import (
 	"flag"
-	"log"
 	"net/http"
 	"os"
+
+	"go.uber.org/zap"
 
 	"github.com/shevchukeugeni/metrics/internal/server"
 	"github.com/shevchukeugeni/metrics/internal/store"
@@ -23,13 +24,19 @@ func init() {
 func main() {
 	flag.Parse()
 
+	logger, err := zap.NewDevelopment()
+	if err != nil {
+		panic(err)
+	}
+	defer logger.Sync()
+
 	memStorage := store.NewMemStorage()
 
-	router := server.SetupRouter(memStorage)
+	router := server.SetupRouter(logger, memStorage)
 
-	log.Println("Running server on", flagRunAddr)
-	err := http.ListenAndServe(flagRunAddr, router)
+	logger.Info("Running server on", zap.String("address", flagRunAddr))
+	err = http.ListenAndServe(flagRunAddr, router)
 	if err != http.ErrServerClosed {
-		log.Fatalf("HTTP server ListenAndServe Error: %v", err)
+		logger.Fatal("HTTP server ListenAndServe Error", zap.Error(err))
 	}
 }
