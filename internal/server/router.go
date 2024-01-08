@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -61,6 +62,9 @@ func (ro *router) Handler() http.Handler {
 	r.Get("/", ro.getMetrics)
 	r.Post("/value/", ro.getMetricJSON)
 	r.Post("/update/", ro.updateMetricJSON)
+	//DEPRECATED
+	r.Get("/value/{mType}/{name}", ro.getMetric)
+	r.Post("/update/{mType}/{name}/{value}", ro.updateMetric)
 	return r
 }
 
@@ -235,4 +239,49 @@ func (ro *router) WithLogging(h http.Handler) http.Handler {
 	}
 
 	return http.HandlerFunc(logFn)
+}
+
+// DEPRECATED
+func (ro *router) getMetric(w http.ResponseWriter, r *http.Request) {
+	mType := strings.ToLower(chi.URLParam(r, "mType"))
+	if mType != types.Counter && mType != types.Gauge {
+		http.Error(w, "incorrect metric type", http.StatusNotFound)
+		return
+	}
+
+	name := chi.URLParam(r, "name")
+
+	metrics := ro.ms.GetMetric(mType)
+	if metrics == nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+
+	value, ok := metrics[name]
+	if !ok {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	fmt.Fprint(w, value)
+}
+
+// DEPRECATED
+func (ro *router) updateMetric(w http.ResponseWriter, r *http.Request) {
+	mType := strings.ToLower(chi.URLParam(r, "mType"))
+	if mType != "counter" && mType != "gauge" {
+		http.Error(w, "incorrect metric type", http.StatusBadRequest)
+		return
+	}
+
+	name, value := chi.URLParam(r, "name"), chi.URLParam(r, "value")
+
+	_, err := ro.ms.UpdateMetric(mType, name, value)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
 }
