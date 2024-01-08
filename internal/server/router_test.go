@@ -294,7 +294,7 @@ func Test_router_getMetric(t *testing.T) {
 		{
 			name:   "failed test #3",
 			method: http.MethodGet,
-			target: "/value/gauge/test",
+			target: "/valuee/",
 			want: want{
 				code:        404,
 				response:    "404 page not found\n",
