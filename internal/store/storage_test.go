@@ -1,8 +1,9 @@
-package utils
+package store
 
 import (
-	"github.com/stretchr/testify/require"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestCounter_Update(t *testing.T) {
@@ -194,7 +195,7 @@ func TestMemStorage_UpdateMetric(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ms := &MemStorage{
-				Metrics: tt.fields.Metrics,
+				metrics: tt.fields.Metrics,
 			}
 			if err := ms.UpdateMetric(tt.args.mtype, tt.args.name, tt.args.value); (err != nil) != tt.wantErr {
 				t.Errorf("UpdateMetric() error = %v, wantErr %v", err, tt.wantErr)

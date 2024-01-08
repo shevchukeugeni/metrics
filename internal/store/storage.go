@@ -1,4 +1,4 @@
-package utils
+package store
 
 import (
 	"errors"
@@ -9,20 +9,20 @@ import (
 )
 
 type MemStorage struct {
-	Metrics map[string]Metric
+	metrics map[string]Metric
 }
 
 func NewMemStorage() *MemStorage {
 	return &MemStorage{
 		map[string]Metric{
-			"gauge":   Gauge{},
-			"counter": Counter{},
+			types.Gauge:   Gauge{},
+			types.Counter: Counter{},
 		},
 	}
 }
 
 func (ms *MemStorage) GetMetric(mtype string) map[string]string {
-	metric, ok := ms.Metrics[mtype]
+	metric, ok := ms.metrics[mtype]
 	if !ok {
 		return nil
 	} else {
@@ -31,11 +31,11 @@ func (ms *MemStorage) GetMetric(mtype string) map[string]string {
 }
 
 func (ms *MemStorage) GetMetrics() map[string]Metric {
-	return ms.Metrics
+	return ms.metrics
 }
 
 func (ms *MemStorage) UpdateMetric(mtype, name, value string) error {
-	metric, ok := ms.Metrics[mtype]
+	metric, ok := ms.metrics[mtype]
 	if !ok {
 		return types.ErrUnknownType
 	}

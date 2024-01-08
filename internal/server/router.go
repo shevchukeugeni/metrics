@@ -7,7 +7,9 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/shevchukeugeni/metrics/internal/utils"
+
+	"github.com/shevchukeugeni/metrics/internal/store"
+	"github.com/shevchukeugeni/metrics/internal/types"
 )
 
 const tpl = `
@@ -36,7 +38,7 @@ type router struct {
 }
 
 type MetricStorage interface {
-	GetMetrics() map[string]utils.Metric
+	GetMetrics() map[string]store.Metric
 	GetMetric(string) map[string]string
 	UpdateMetric(mtype, name, value string) error
 }
@@ -88,18 +90,20 @@ func (ro *router) getMetrics(w http.ResponseWriter, r *http.Request) {
 	tmpl, err := template.New("webpage").Parse(tpl)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=UTF-8")
 	err = tmpl.Execute(w, data)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 }
 
 func (ro *router) getMetric(w http.ResponseWriter, r *http.Request) {
 	mType := strings.ToLower(chi.URLParam(r, "mType"))
-	if mType != "counter" && mType != "gauge" {
+	if mType != types.Counter && mType != types.Gauge {
 		http.Error(w, "incorrect metric type", http.StatusNotFound)
 		return
 	}

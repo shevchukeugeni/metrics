@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -12,7 +13,7 @@ import (
 	"github.com/caarlos0/env/v6"
 	"github.com/go-resty/resty/v2"
 
-	"github.com/shevchukeugeni/metrics/internal/utils"
+	"github.com/shevchukeugeni/metrics/internal/store"
 )
 
 type Config struct {
@@ -43,16 +44,22 @@ func main() {
 	//	log.Fatalf("%s %s %s\n", flagRunAddr, "not responding", err.Error())
 	//}
 
-	metrics := utils.NewRuntimeMetrics()
+	metrics := store.NewRuntimeMetrics()
 
 	pollTicker := time.NewTicker(time.Duration(cfg.PollInterval) * time.Second)
+	defer pollTicker.Stop()
 	reportTicker := time.NewTicker(time.Duration(cfg.ReportInterval) * time.Second)
+	defer reportTicker.Stop()
 
 	client := resty.New()
 
-	go func() {
+	ctx, cancelFunc := context.WithCancel(context.Background())
+
+	go func(ctx context.Context) {
 		for {
 			select {
+			case <-ctx.Done():
+				return
 			case <-pollTicker.C:
 				metrics.Update()
 
@@ -81,9 +88,11 @@ func main() {
 				log.Println("Report is sent!")
 			}
 		}
-	}()
+	}(ctx)
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 	<-sig
+
+	cancelFunc()
 }

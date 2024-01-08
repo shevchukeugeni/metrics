@@ -8,7 +8,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	utils "github.com/shevchukeugeni/metrics/internal/utils"
+	store "github.com/shevchukeugeni/metrics/internal/store"
 )
 
 // MockMetricStorage is a mock of MetricStorage interface.
@@ -49,10 +49,10 @@ func (mr *MockMetricStorageMockRecorder) GetMetric(arg0 interface{}) *gomock.Cal
 }
 
 // GetMetrics mocks base method.
-func (m *MockMetricStorage) GetMetrics() map[string]utils.Metric {
+func (m *MockMetricStorage) GetMetrics() map[string]store.Metric {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetMetrics")
-	ret0, _ := ret[0].(map[string]utils.Metric)
+	ret0, _ := ret[0].(map[string]store.Metric)
 	return ret0
 }
 

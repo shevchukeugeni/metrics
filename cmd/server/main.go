@@ -7,7 +7,7 @@ import (
 	"os"
 
 	"github.com/shevchukeugeni/metrics/internal/server"
-	"github.com/shevchukeugeni/metrics/internal/utils"
+	"github.com/shevchukeugeni/metrics/internal/store"
 )
 
 var flagRunAddr string
@@ -23,13 +23,13 @@ func init() {
 func main() {
 	flag.Parse()
 
-	memStorage := utils.NewMemStorage()
+	memStorage := store.NewMemStorage()
 
 	router := server.SetupRouter(memStorage)
 
 	log.Println("Running server on", flagRunAddr)
 	err := http.ListenAndServe(flagRunAddr, router)
-	if err != nil {
-		log.Fatal(err)
+	if err != http.ErrServerClosed {
+		log.Fatalf("HTTP server ListenAndServe Error: %v", err)
 	}
 }
