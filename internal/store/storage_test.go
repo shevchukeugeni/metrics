@@ -66,7 +66,7 @@ func TestCounter_Update(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := tt.g.Update(tt.args.name, tt.args.value); (err != nil) != tt.wantErr {
+			if _, err := tt.g.Update(tt.args.name, tt.args.value); (err != nil) != tt.wantErr {
 				t.Errorf("Update() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
@@ -133,7 +133,7 @@ func TestGauge_Update(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := tt.g.Update(tt.args.name, tt.args.value); (err != nil) != tt.wantErr {
+			if _, err := tt.g.Update(tt.args.name, tt.args.value); (err != nil) != tt.wantErr {
 				t.Errorf("Update() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
@@ -197,7 +197,7 @@ func TestMemStorage_UpdateMetric(t *testing.T) {
 			ms := &MemStorage{
 				metrics: tt.fields.Metrics,
 			}
-			if err := ms.UpdateMetric(tt.args.mtype, tt.args.name, tt.args.value); (err != nil) != tt.wantErr {
+			if _, err := ms.UpdateMetric(tt.args.mtype, tt.args.name, tt.args.value); (err != nil) != tt.wantErr {
 				t.Errorf("UpdateMetric() error = %v, wantErr %v", err, tt.wantErr)
 			}
 

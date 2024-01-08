@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"github.com/shevchukeugeni/metrics/internal/types"
 	"log"
 	"os"
 	"os/signal"
@@ -66,20 +67,21 @@ func main() {
 				log.Println("Metrics are updated")
 			case <-reportTicker.C:
 				for k, v := range metrics.Gauge {
-					_, err := client.R().SetPathParams(map[string]string{
-						"name":  k,
-						"value": v,
-					}).Post(fmt.Sprintf("http://%s/update/gauge/{name}/{value}", cfg.ServerAddr))
+					req, err := client.R().
+						SetHeader("Content-Type", "application/json").
+						SetBody(map[string]interface{}{"id": k, "type": types.Gauge, "value": v}).
+						Post(fmt.Sprintf("http://%s/update/", cfg.ServerAddr))
 					if err != nil {
 						log.Println(err)
 					}
+					_ = req
 				}
 
 				for k, v := range metrics.Counter {
-					_, err := client.R().SetPathParams(map[string]string{
-						"name":  k,
-						"value": fmt.Sprint(v),
-					}).Post(fmt.Sprintf("http://%s/update/gauge/{name}/{value}", cfg.ServerAddr))
+					_, err = client.R().
+						SetHeader("Content-Type", "application/json").
+						SetBody(map[string]interface{}{"id": k, "type": types.Counter, "delta": v}).
+						Post(fmt.Sprintf("http://%s/update/", cfg.ServerAddr))
 					if err != nil {
 						log.Println(err)
 					}

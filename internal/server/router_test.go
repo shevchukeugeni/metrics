@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"errors"
 	"io"
 	"net/http"
@@ -30,9 +31,9 @@ func Test_router_updateMetric(t *testing.T) {
 
 	mockStorage := mocks.NewMockMetricStorage(mockCtrl)
 
-	mockStorage.EXPECT().UpdateMetric("counter", "test", "1").Return(nil).Times(1)
-	mockStorage.EXPECT().UpdateMetric("gauge", "test", "1").Return(nil).Times(1)
-	mockStorage.EXPECT().UpdateMetric("gauge", "test", "2").Return(errors.New("Bad request")).Times(1)
+	mockStorage.EXPECT().UpdateMetric("counter", "test", "1").Return(int64(1), nil).Times(1)
+	mockStorage.EXPECT().UpdateMetric("gauge", "test", "1").Return(float64(2), nil).Times(1)
+	mockStorage.EXPECT().UpdateMetric("gauge", "test", "2").Return(nil, errors.New("Bad request")).Times(1)
 
 	ts := httptest.NewServer(SetupRouter(logger, mockStorage))
 	defer ts.Close()
@@ -41,32 +42,37 @@ func Test_router_updateMetric(t *testing.T) {
 		name   string
 		method string
 		target string
+		body   []byte
 		want   want
 	}{
 		{
 			name:   "positive test #1",
 			method: http.MethodPost,
-			target: "/update/counter/test/1",
+			target: "/update/",
+			body:   []byte(`{"id":"test","type":"counter","delta":1}`),
 			want: want{
 				code:          200,
-				emptyResponse: true,
-				contentType:   "",
+				emptyResponse: false,
+				response:      "{\"id\":\"test\",\"type\":\"counter\",\"delta\":1}\n",
+				contentType:   "application/json",
 			},
 		},
 		{
 			name:   "positive test #2",
 			method: http.MethodPost,
-			target: "/update/gauge/test/1",
+			target: "/update/",
+			body:   []byte(`{"id":"test","type":"gauge","value":1}`),
 			want: want{
 				code:          200,
-				emptyResponse: true,
-				contentType:   "",
+				emptyResponse: false,
+				response:      "{\"id\":\"test\",\"type\":\"gauge\",\"value\":2}\n",
+				contentType:   "application/json",
 			},
 		},
 		{
 			name:   "failed test #1",
 			method: http.MethodPost,
-			target: "/update/",
+			target: "/update/134",
 			want: want{
 				code:          404,
 				emptyResponse: false,
@@ -77,7 +83,7 @@ func Test_router_updateMetric(t *testing.T) {
 		{
 			name:   "failed test #2",
 			method: http.MethodGet,
-			target: "/update/counter/1/1",
+			target: "/update/",
 			want: want{
 				code:          405,
 				emptyResponse: false,
@@ -88,18 +94,32 @@ func Test_router_updateMetric(t *testing.T) {
 		{
 			name:   "failed test #3",
 			method: http.MethodPost,
-			target: "/update/less/params",
+			target: "/update/",
+			body:   []byte(`{"id":"test","type":"counter"}`),
 			want: want{
-				code:          404,
+				code:          400,
 				emptyResponse: false,
-				response:      "404 page not found\n",
+				response:      "incorrect metric value\n",
 				contentType:   "text/plain; charset=utf-8",
 			},
 		},
 		{
 			name:   "failed test #4",
 			method: http.MethodPost,
-			target: "/update/gauge/test/2",
+			target: "/update/",
+			body:   []byte(`{"id":"test","type":"gauge"}`),
+			want: want{
+				code:          400,
+				emptyResponse: false,
+				response:      "incorrect metric value\n",
+				contentType:   "text/plain; charset=utf-8",
+			},
+		},
+		{
+			name:   "failed test #5 incorrect metric",
+			method: http.MethodPost,
+			target: "/update/",
+			body:   []byte(`{"id":"test","type":"gauge","value":2}`),
 			want: want{
 				code:          400,
 				emptyResponse: false,
@@ -108,11 +128,12 @@ func Test_router_updateMetric(t *testing.T) {
 			},
 		},
 		{
-			name:   "failed test #5 incorrect metric type",
+			name:   "failed test #6 incorrect metric type",
 			method: http.MethodPost,
-			target: "/update/gauga/test/2",
+			target: "/update/",
+			body:   []byte(`{"id":"test","type":"couunter","delta":1}`),
 			want: want{
-				code:          400,
+				code:          404,
 				emptyResponse: false,
 				response:      "incorrect metric type\n",
 				contentType:   "text/plain; charset=utf-8",
@@ -121,7 +142,7 @@ func Test_router_updateMetric(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			res, body := testRequest(t, ts, tt.method, tt.target)
+			res, body := testRequest(t, ts, tt.method, tt.target, tt.body)
 			defer res.Body.Close()
 			assert.Equal(t, tt.want.code, res.StatusCode)
 
@@ -186,7 +207,7 @@ func Test_router_getMetrics(t *testing.T) {
 			ts := httptest.NewServer(SetupRouter(logger, tt.storage))
 			defer ts.Close()
 
-			res, body := testRequest(t, ts, tt.method, "/")
+			res, body := testRequest(t, ts, tt.method, "/", nil)
 			defer res.Body.Close()
 			assert.Equal(t, tt.want.code, res.StatusCode)
 
@@ -216,7 +237,7 @@ func Test_router_getMetric(t *testing.T) {
 	mockStorage.EXPECT().GetMetric("gauge").Return(
 		map[string]string{
 			"test2": "2.22",
-		}).Times(2)
+		}).Times(1)
 
 	ts := httptest.NewServer(SetupRouter(logger, mockStorage))
 	defer ts.Close()
@@ -225,32 +246,35 @@ func Test_router_getMetric(t *testing.T) {
 		name   string
 		method string
 		target string
+		body   []byte
 		want   want
 	}{
 		{
 			name:   "positive test #1",
-			method: http.MethodGet,
-			target: "/value/counter/test1",
+			method: http.MethodPost,
+			target: "/value/",
+			body:   []byte(`{"id":"test1","type":"counter"}`),
 			want: want{
 				code:        200,
-				response:    "1",
-				contentType: "text/plain; charset=utf-8",
+				response:    "{\"id\":\"test1\",\"type\":\"counter\",\"delta\":1}\n",
+				contentType: "application/json",
 			},
 		},
 		{
 			name:   "positive test #2",
-			method: http.MethodGet,
-			target: "/value/gauge/test2",
+			method: http.MethodPost,
+			target: "/value/",
+			body:   []byte(`{"id":"test2","type":"gauge"}`),
 			want: want{
 				code:        200,
-				response:    "2.22",
-				contentType: "text/plain; charset=utf-8",
+				response:    "{\"id\":\"test2\",\"type\":\"gauge\",\"value\":2.22}\n",
+				contentType: "application/json",
 			},
 		},
 		{
 			name:   "failed test #1",
 			method: http.MethodGet,
-			target: "/value/",
+			target: "/values/",
 			want: want{
 				code:        404,
 				response:    "404 page not found\n",
@@ -259,8 +283,8 @@ func Test_router_getMetric(t *testing.T) {
 		},
 		{
 			name:   "failed test #2",
-			method: http.MethodPost,
-			target: "/value/counter/1",
+			method: http.MethodGet,
+			target: "/value/",
 			want: want{
 				code:        405,
 				response:    "",
@@ -273,14 +297,14 @@ func Test_router_getMetric(t *testing.T) {
 			target: "/value/gauge/test",
 			want: want{
 				code:        404,
-				response:    "not found\n",
+				response:    "404 page not found\n",
 				contentType: "text/plain; charset=utf-8",
 			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			res, body := testRequest(t, ts, tt.method, tt.target)
+			res, body := testRequest(t, ts, tt.method, tt.target, tt.body)
 			defer res.Body.Close()
 
 			assert.Equal(t, tt.want.code, res.StatusCode)
@@ -290,9 +314,11 @@ func Test_router_getMetric(t *testing.T) {
 	}
 }
 
-func testRequest(t *testing.T, ts *httptest.Server, method,
-	path string) (*http.Response, string) {
-	req, err := http.NewRequest(method, ts.URL+path, nil)
+func testRequest(t *testing.T, ts *httptest.Server,
+	method, path string, body []byte) (*http.Response, string) {
+	bodyReader := bytes.NewReader(body)
+
+	req, err := http.NewRequest(method, ts.URL+path, bodyReader)
 	require.NoError(t, err)
 
 	resp, err := ts.Client().Do(req)

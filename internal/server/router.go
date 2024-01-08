@@ -1,10 +1,11 @@
 package server
 
 import (
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"net/http"
-	"strings"
+	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -43,7 +44,7 @@ type router struct {
 type MetricStorage interface {
 	GetMetrics() map[string]store.Metric
 	GetMetric(string) map[string]string
-	UpdateMetric(mtype, name, value string) error
+	UpdateMetric(mtype, name, value string) (any, error)
 }
 
 func SetupRouter(logger *zap.Logger, ms MetricStorage) http.Handler {
@@ -58,8 +59,8 @@ func (ro *router) Handler() http.Handler {
 	r := chi.NewRouter()
 	r.Use(ro.WithLogging)
 	r.Get("/", ro.getMetrics)
-	r.Get("/value/{mType}/{name}", ro.getMetric)
-	r.Post("/update/{mType}/{name}/{value}", ro.updateMetric)
+	r.Post("/value/", ro.getMetricJSON)
+	r.Post("/update/", ro.updateMetricJSON)
 	return r
 }
 
@@ -76,7 +77,7 @@ func (ro *router) getMetrics(w http.ResponseWriter, r *http.Request) {
 
 	data := mdata{}
 
-	for k, v := range ro.ms.GetMetric("counter") {
+	for k, v := range ro.ms.GetMetric(types.Counter) {
 		data.Metrics = append(data.Metrics, metric{
 			"Counter",
 			k,
@@ -84,7 +85,7 @@ func (ro *router) getMetrics(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	for k, v := range ro.ms.GetMetric("gauge") {
+	for k, v := range ro.ms.GetMetric(types.Gauge) {
 		data.Metrics = append(data.Metrics, metric{
 			"Gauge",
 			k,
@@ -106,47 +107,105 @@ func (ro *router) getMetrics(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (ro *router) getMetric(w http.ResponseWriter, r *http.Request) {
-	mType := strings.ToLower(chi.URLParam(r, "mType"))
-	if mType != types.Counter && mType != types.Gauge {
+func (ro *router) getMetricJSON(w http.ResponseWriter, r *http.Request) {
+	var req types.Metrics
+
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		http.Error(w, "Unable to decode json: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if req.MType != types.Counter && req.MType != types.Gauge {
 		http.Error(w, "incorrect metric type", http.StatusNotFound)
 		return
 	}
 
-	name := chi.URLParam(r, "name")
-
-	metrics := ro.ms.GetMetric(mType)
+	metrics := ro.ms.GetMetric(req.MType)
 	if metrics == nil {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
 
-	value, ok := metrics[name]
+	res := req
+
+	value, ok := metrics[req.ID]
 	if !ok {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
 
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	fmt.Fprint(w, value)
+	if req.MType == types.Counter {
+		intValue, err := strconv.ParseInt(value, 10, 64)
+		if err != nil {
+			http.Error(w, "Can't parse data: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		res.Delta = &intValue
+	} else {
+		floatValue, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			http.Error(w, "Can't parse data: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		res.Value = &floatValue
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	err = json.NewEncoder(w).Encode(res)
+	if err != nil {
+		http.Error(w, "Can't marshal data: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
 }
 
-func (ro *router) updateMetric(w http.ResponseWriter, r *http.Request) {
-	mType := strings.ToLower(chi.URLParam(r, "mType"))
-	if mType != "counter" && mType != "gauge" {
-		http.Error(w, "incorrect metric type", http.StatusBadRequest)
-		return
-	}
+func (ro *router) updateMetricJSON(w http.ResponseWriter, r *http.Request) {
+	var req types.Metrics
 
-	name, value := chi.URLParam(r, "name"), chi.URLParam(r, "value")
-
-	err := ro.ms.UpdateMetric(mType, name, value)
+	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, "Unable to decode json: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
+	switch req.MType {
+	case types.Counter:
+		if req.Delta == nil {
+			http.Error(w, "incorrect metric value", http.StatusBadRequest)
+			return
+		}
+
+		newValue, err := ro.ms.UpdateMetric(req.MType, req.ID, fmt.Sprint(*req.Delta))
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		delta := newValue.(int64)
+		req.Delta = &delta
+	case types.Gauge:
+		if req.Value == nil {
+			http.Error(w, "incorrect metric value", http.StatusBadRequest)
+			return
+		}
+
+		newValue, err := ro.ms.UpdateMetric(req.MType, req.ID, fmt.Sprint(*req.Value))
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		value := newValue.(float64)
+		req.Value = &value
+	default:
+		http.Error(w, "incorrect metric type", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	err = json.NewEncoder(w).Encode(req)
+	if err != nil {
+		http.Error(w, "Can't marshal data: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
 }
 
 func (ro *router) WithLogging(h http.Handler) http.Handler {
