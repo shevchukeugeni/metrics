@@ -8,7 +8,7 @@ import (
 
 func TestRuntimeMetrics_Update(t *testing.T) {
 	type fields struct {
-		Gauge   map[string]string
+		Gauge   map[string]float64
 		Counter map[string]int64
 	}
 	tests := []struct {
@@ -18,7 +18,7 @@ func TestRuntimeMetrics_Update(t *testing.T) {
 		{
 			name: "success",
 			fields: fields{
-				Gauge:   make(map[string]string),
+				Gauge:   make(map[string]float64),
 				Counter: make(map[string]int64),
 			},
 		},

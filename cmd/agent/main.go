@@ -1,9 +1,12 @@
 package main
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"flag"
 	"fmt"
+	"github.com/shevchukeugeni/metrics/internal/types"
 	"log"
 	"os"
 	"os/signal"
@@ -66,20 +69,35 @@ func main() {
 				log.Println("Metrics are updated")
 			case <-reportTicker.C:
 				for k, v := range metrics.Gauge {
-					_, err := client.R().SetPathParams(map[string]string{
-						"name":  k,
-						"value": v,
-					}).Post(fmt.Sprintf("http://%s/update/gauge/{name}/{value}", cfg.ServerAddr))
+					data := fmt.Sprintf("{\"id\": \"%s\", \"type\": \"%s\", \"value\": %v}", k, types.Gauge, v)
+					cdata, err := Compress([]byte(data))
+					if err != nil {
+						log.Println(err)
+						return
+					}
+
+					_, err = client.R().
+						SetHeader("Content-Type", "application/json").
+						SetHeader("Content-Encoding", "gzip").
+						SetBody(cdata).
+						Post(fmt.Sprintf("http://%s/update/", cfg.ServerAddr))
 					if err != nil {
 						log.Println(err)
 					}
 				}
 
 				for k, v := range metrics.Counter {
-					_, err := client.R().SetPathParams(map[string]string{
-						"name":  k,
-						"value": fmt.Sprint(v),
-					}).Post(fmt.Sprintf("http://%s/update/gauge/{name}/{value}", cfg.ServerAddr))
+					data := fmt.Sprintf("{\"id\": \"%s\", \"type\": \"%s\", \"delta\": %v}", k, types.Counter, v)
+					cdata, err := Compress([]byte(data))
+					if err != nil {
+						log.Println(err)
+						return
+					}
+					_, err = client.R().
+						SetHeader("Content-Type", "application/json").
+						SetHeader("Content-Encoding", "gzip").
+						SetBody(cdata).
+						Post(fmt.Sprintf("http://%s/update/", cfg.ServerAddr))
 					if err != nil {
 						log.Println(err)
 					}
@@ -95,4 +113,21 @@ func main() {
 	<-sig
 
 	cancelFunc()
+}
+
+// Compress сжимает слайс байт.
+func Compress(data []byte) ([]byte, error) {
+	var b bytes.Buffer
+	w := gzip.NewWriter(&b)
+
+	_, err := w.Write(data)
+	if err != nil {
+		return nil, fmt.Errorf("failed write data to compress temporary buffer: %v", err)
+	}
+	err = w.Close()
+	if err != nil {
+		return nil, fmt.Errorf("failed compress data: %v", err)
+	}
+
+	return b.Bytes(), nil
 }
