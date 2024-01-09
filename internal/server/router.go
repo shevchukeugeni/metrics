@@ -104,7 +104,7 @@ func (ro *router) getMetrics(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=UTF-8")
-	w.Header().Set("Content-Encoding", "gzip")
+	w.WriteHeader(http.StatusOK)
 	err = tmpl.Execute(w, data)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
