@@ -40,6 +40,7 @@ const tpl = `
 type router struct {
 	logger *zap.Logger
 	ms     MetricStorage
+	dw     *store.DumpWorker
 }
 
 type MetricStorage interface {
@@ -48,10 +49,11 @@ type MetricStorage interface {
 	UpdateMetric(mtype, name, value string) (any, error)
 }
 
-func SetupRouter(logger *zap.Logger, ms MetricStorage) http.Handler {
+func SetupRouter(logger *zap.Logger, ms MetricStorage, dw *store.DumpWorker) http.Handler {
 	ro := &router{
 		logger: logger,
 		ms:     ms,
+		dw:     dw,
 	}
 	return ro.Handler()
 }
@@ -212,6 +214,11 @@ func (ro *router) updateMetricJSON(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "Can't marshal data: "+err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	//If DumpWorker was initialized and run in sync mode
+	if ro.dw != nil {
+		ro.dw.DumpSync()
 	}
 }
 

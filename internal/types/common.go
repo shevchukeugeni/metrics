@@ -5,6 +5,12 @@ const (
 	Gauge   = "gauge"
 )
 
+type DumpConfig struct {
+	StoreInterval   uint   `env:"STORE_INTERVAL"`
+	FileStoragePath string `env:"FILE_STORAGE_PATH"`
+	Restore         bool   `env:"RESTORE"`
+}
+
 type Metrics struct {
 	ID    string   `json:"id"`              // имя метрики
 	MType string   `json:"type"`            // параметр, принимающий значение gauge или counter
