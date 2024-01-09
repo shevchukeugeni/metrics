@@ -105,7 +105,6 @@ func (ro *router) getMetrics(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=UTF-8")
-	w.WriteHeader(http.StatusOK)
 	err = tmpl.Execute(w, data)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -157,7 +156,6 @@ func (ro *router) getMetricJSON(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
 	err = json.NewEncoder(w).Encode(res)
 	if err != nil {
 		http.Error(w, "Can't marshal data: "+err.Error(), http.StatusInternalServerError)
@@ -208,7 +206,6 @@ func (ro *router) updateMetricJSON(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
 	err = json.NewEncoder(w).Encode(req)
 	if err != nil {
 		http.Error(w, "Can't marshal data: "+err.Error(), http.StatusInternalServerError)

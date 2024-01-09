@@ -29,7 +29,7 @@ var cfg Config
 
 func init() {
 	flag.StringVar(&cfg.ServerAddr, "a", "localhost:8080", "address and port to run server")
-	flag.IntVar(&cfg.ReportInterval, "r", 5, "report interval in seconds")
+	flag.IntVar(&cfg.ReportInterval, "r", 10, "report interval in seconds")
 	flag.IntVar(&cfg.PollInterval, "p", 2, "poll interval in seconds")
 }
 
@@ -95,6 +95,7 @@ func main() {
 					}
 					_, err = client.R().
 						SetHeader("Content-Type", "application/json").
+						SetHeader("Content-Encoding", "gzip").
 						SetBody(cdata).
 						Post(fmt.Sprintf("http://%s/update/", cfg.ServerAddr))
 					if err != nil {
