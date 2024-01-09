@@ -187,7 +187,7 @@ func Test_router_getMetrics(t *testing.T) {
 			storage: mockStorage,
 			want: want{
 				code:        200,
-				response:    "\n<!DOCTYPE html>\n<html lang=\"en\">\n<body>\n<table>\n    <tr>\n        <th>Type</th>\n        <th>Name</th>\n        <th>Value</th>\n    </tr>\n    \n        <tr>\n            <td>Counter</td>\n            <td>test2</td>\n            <td>4</td>\n        </tr>\n    \n</table>\n</body>\n</html>",
+				response:    "\x1f\x8b\b\x00\x00\x00\x00\x00\x00\xff\xe2\xb2Qt\xf1w\x0e\x89\fpU\xc8(\xc9ͱ\xe3\xb2\x01Q\n9\x89y\xe9\xb6J\xa9yJv\\6I\xf9)\x95v\\6%\x89I9\xa9v\\\n\n\n\n6%E\x10\x06\x84\x93a\x17RY\x90j\xa3_\x92\x81*ꗘ\x8bE4,1\xa7\x14I\xd8F\x1ff\x18\x92*$\xe3!\x02)v\xce\xf9\xa5y%\xa9E6\xfa%)\x98\x92%\xa9\xc5%FإLP\x85\x91\xac\xb3чz\xc9F\x1f\xeaE}p\x10\x00\x02\x00\x00\xff\xff\t\xb6j+\x13\x01\x00\x00",
 				contentType: "text/html; charset=UTF-8",
 			},
 		},
