@@ -59,7 +59,7 @@ func SetupRouter(logger *zap.Logger, ms MetricStorage) http.Handler {
 func (ro *router) Handler() http.Handler {
 	r := chi.NewRouter()
 	r.Use(ro.WithLogging)
-	r.Get("/", ro.getMetrics)
+	r.Get("/", gzipMiddleware(ro.getMetrics))
 	r.Post("/value/", gzipMiddleware(ro.getMetricJSON))
 	r.Post("/update/", gzipMiddleware(ro.updateMetricJSON))
 	//DEPRECATED
