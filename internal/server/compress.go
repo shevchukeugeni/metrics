@@ -38,7 +38,6 @@ func (c *CompressWriter) WriteHeader(statusCode int) {
 	c.w.WriteHeader(statusCode)
 }
 
-// Close закрывает gzip.Writer и досылает все данные из буфера.
 func (c *CompressWriter) Close() error {
 	return c.zw.Close()
 }
