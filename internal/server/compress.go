@@ -26,7 +26,7 @@ func (c *CompressWriter) Header() http.Header {
 
 func (c *CompressWriter) Write(p []byte) (int, error) {
 	switch c.w.Header().Get("Content-Type") {
-	case "application/json", "text/html":
+	case "application/json", "text/html", "text/html; charset=UTF-8":
 		return c.zw.Write(p)
 	default:
 		return c.w.Write(p)
@@ -34,14 +34,19 @@ func (c *CompressWriter) Write(p []byte) (int, error) {
 }
 
 func (c *CompressWriter) WriteHeader(statusCode int) {
-	c.w.Header().Set("Content-Encoding", "gzip")
+	if statusCode < 300 {
+		c.w.Header().Set("Content-Encoding", "gzip")
+	}
 	c.w.WriteHeader(statusCode)
 }
 
+// Close закрывает gzip.Writer и досылает все данные из буфера.
 func (c *CompressWriter) Close() error {
 	return c.zw.Close()
 }
 
+// compressReader реализует интерфейс io.ReadCloser и позволяет прозрачно для сервера
+// декомпрессировать получаемые от клиента данные
 type CompressReader struct {
 	r  io.ReadCloser
 	zr *gzip.Reader

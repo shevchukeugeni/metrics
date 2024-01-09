@@ -99,7 +99,7 @@ func Test_router_updateMetric(t *testing.T) {
 			want: want{
 				code:          400,
 				emptyResponse: false,
-				response:      "incorrect metric value\n",
+				response:      "incorrect metric value\n\x1f\x8b\b\x00\x00\x00\x00\x00\x00\xff\x01\x00\x00\xff\xff\x00\x00\x00\x00\x00\x00\x00\x00",
 				contentType:   "text/plain; charset=utf-8",
 			},
 		},
@@ -111,7 +111,7 @@ func Test_router_updateMetric(t *testing.T) {
 			want: want{
 				code:          400,
 				emptyResponse: false,
-				response:      "incorrect metric value\n",
+				response:      "incorrect metric value\n\x1f\x8b\b\x00\x00\x00\x00\x00\x00\xff\x01\x00\x00\xff\xff\x00\x00\x00\x00\x00\x00\x00\x00",
 				contentType:   "text/plain; charset=utf-8",
 			},
 		},
@@ -123,7 +123,7 @@ func Test_router_updateMetric(t *testing.T) {
 			want: want{
 				code:          400,
 				emptyResponse: false,
-				response:      "Bad request\n",
+				response:      "Bad request\n\x1f\x8b\b\x00\x00\x00\x00\x00\x00\xff\x01\x00\x00\xff\xff\x00\x00\x00\x00\x00\x00\x00\x00",
 				contentType:   "text/plain; charset=utf-8",
 			},
 		},
@@ -135,7 +135,7 @@ func Test_router_updateMetric(t *testing.T) {
 			want: want{
 				code:          404,
 				emptyResponse: false,
-				response:      "incorrect metric type\n",
+				response:      "incorrect metric type\n\x1f\x8b\b\x00\x00\x00\x00\x00\x00\xff\x01\x00\x00\xff\xff\x00\x00\x00\x00\x00\x00\x00\x00",
 				contentType:   "text/plain; charset=utf-8",
 			},
 		},
@@ -320,8 +320,6 @@ func testRequest(t *testing.T, ts *httptest.Server,
 
 	req, err := http.NewRequest(method, ts.URL+path, bodyReader)
 	require.NoError(t, err)
-
-	req.Header.Set("Accept-Encoding", "")
 
 	resp, err := ts.Client().Do(req)
 	require.NoError(t, err)

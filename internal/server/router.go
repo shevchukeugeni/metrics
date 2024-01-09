@@ -59,10 +59,9 @@ func SetupRouter(logger *zap.Logger, ms MetricStorage) http.Handler {
 func (ro *router) Handler() http.Handler {
 	r := chi.NewRouter()
 	r.Use(ro.WithLogging)
-	r.Use(gzipMiddleware)
 	r.Get("/", ro.getMetrics)
-	r.Post("/value/", ro.getMetricJSON)
-	r.Post("/update/", ro.updateMetricJSON)
+	r.Post("/value/", gzipMiddleware(ro.getMetricJSON))
+	r.Post("/update/", gzipMiddleware(ro.updateMetricJSON))
 	//DEPRECATED
 	r.Get("/value/{mType}/{name}", ro.getMetric)
 	r.Post("/update/{mType}/{name}/{value}", ro.updateMetric)
@@ -156,6 +155,7 @@ func (ro *router) getMetricJSON(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 	err = json.NewEncoder(w).Encode(res)
 	if err != nil {
 		http.Error(w, "Can't marshal data: "+err.Error(), http.StatusInternalServerError)
@@ -206,6 +206,7 @@ func (ro *router) updateMetricJSON(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 	err = json.NewEncoder(w).Encode(req)
 	if err != nil {
 		http.Error(w, "Can't marshal data: "+err.Error(), http.StatusInternalServerError)
@@ -242,7 +243,7 @@ func (ro *router) WithLogging(h http.Handler) http.Handler {
 	return http.HandlerFunc(logFn)
 }
 
-func gzipMiddleware(h http.Handler) http.Handler {
+func gzipMiddleware(h http.HandlerFunc) http.HandlerFunc {
 	gzipFunc := func(w http.ResponseWriter, r *http.Request) {
 		// по умолчанию устанавливаем оригинальный http.ResponseWriter как тот,
 		// который будем передавать следующей функции
@@ -279,7 +280,7 @@ func gzipMiddleware(h http.Handler) http.Handler {
 		h.ServeHTTP(ow, r)
 	}
 
-	return http.HandlerFunc(gzipFunc)
+	return gzipFunc
 }
 
 // DEPRECATED
