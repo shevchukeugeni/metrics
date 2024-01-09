@@ -43,8 +43,6 @@ func (c *CompressWriter) Close() error {
 	return c.zw.Close()
 }
 
-// compressReader реализует интерфейс io.ReadCloser и позволяет прозрачно для сервера
-// декомпрессировать получаемые от клиента данные
 type CompressReader struct {
 	r  io.ReadCloser
 	zr *gzip.Reader
