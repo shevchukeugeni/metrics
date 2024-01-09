@@ -59,6 +59,7 @@ func SetupRouter(logger *zap.Logger, ms MetricStorage) http.Handler {
 func (ro *router) Handler() http.Handler {
 	r := chi.NewRouter()
 	r.Use(ro.WithLogging)
+	r.Use(gzipMiddleware)
 	r.Get("/", ro.getMetrics)
 	r.Post("/value/", ro.getMetricJSON)
 	r.Post("/update/", ro.updateMetricJSON)
@@ -104,6 +105,7 @@ func (ro *router) getMetrics(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=UTF-8")
+	w.WriteHeader(http.StatusOK)
 	err = tmpl.Execute(w, data)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -155,6 +157,7 @@ func (ro *router) getMetricJSON(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 	err = json.NewEncoder(w).Encode(res)
 	if err != nil {
 		http.Error(w, "Can't marshal data: "+err.Error(), http.StatusInternalServerError)
@@ -205,6 +208,7 @@ func (ro *router) updateMetricJSON(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 	err = json.NewEncoder(w).Encode(req)
 	if err != nil {
 		http.Error(w, "Can't marshal data: "+err.Error(), http.StatusInternalServerError)
@@ -239,6 +243,46 @@ func (ro *router) WithLogging(h http.Handler) http.Handler {
 	}
 
 	return http.HandlerFunc(logFn)
+}
+
+func gzipMiddleware(h http.Handler) http.Handler {
+	gzipFunc := func(w http.ResponseWriter, r *http.Request) {
+		// по умолчанию устанавливаем оригинальный http.ResponseWriter как тот,
+		// который будем передавать следующей функции
+		ow := w
+
+		// проверяем, что клиент умеет получать от сервера сжатые данные в формате gzip
+		acceptEncoding := r.Header.Get("Accept-Encoding")
+		supportsGzip := strings.Contains(acceptEncoding, "gzip")
+		if supportsGzip {
+			// оборачиваем оригинальный http.ResponseWriter новым с поддержкой сжатия
+			cw := NewCompressWriter(w)
+			// меняем оригинальный http.ResponseWriter на новый
+			ow = cw
+			// не забываем отправить клиенту все сжатые данные после завершения middleware
+			defer cw.Close()
+		}
+
+		// проверяем, что клиент отправил серверу сжатые данные в формате gzip
+		contentEncoding := r.Header.Get("Content-Encoding")
+		sendsGzip := strings.Contains(contentEncoding, "gzip")
+		if sendsGzip {
+			// оборачиваем тело запроса в io.Reader с поддержкой декомпрессии
+			cr, err := NewCompressReader(r.Body)
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			// меняем тело запроса на новое
+			r.Body = cr
+			defer cr.Close()
+		}
+
+		// передаём управление хендлеру
+		h.ServeHTTP(ow, r)
+	}
+
+	return http.HandlerFunc(gzipFunc)
 }
 
 // DEPRECATED

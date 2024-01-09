@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"flag"
 	"fmt"
@@ -27,7 +29,7 @@ var cfg Config
 
 func init() {
 	flag.StringVar(&cfg.ServerAddr, "a", "localhost:8080", "address and port to run server")
-	flag.IntVar(&cfg.ReportInterval, "r", 10, "report interval in seconds")
+	flag.IntVar(&cfg.ReportInterval, "r", 5, "report interval in seconds")
 	flag.IntVar(&cfg.PollInterval, "p", 2, "poll interval in seconds")
 }
 
@@ -67,20 +69,33 @@ func main() {
 				log.Println("Metrics are updated")
 			case <-reportTicker.C:
 				for k, v := range metrics.Gauge {
-					req, err := client.R().
+					data := fmt.Sprintf("{\"id\": \"%s\", \"type\": \"%s\", \"value\": %v}", k, types.Gauge, v)
+					cdata, err := Compress([]byte(data))
+					if err != nil {
+						log.Println(err)
+						return
+					}
+
+					_, err = client.R().
 						SetHeader("Content-Type", "application/json").
-						SetBody(map[string]interface{}{"id": k, "type": types.Gauge, "value": v}).
+						SetHeader("Content-Encoding", "gzip").
+						SetBody(cdata).
 						Post(fmt.Sprintf("http://%s/update/", cfg.ServerAddr))
 					if err != nil {
 						log.Println(err)
 					}
-					_ = req
 				}
 
 				for k, v := range metrics.Counter {
+					data := fmt.Sprintf("{\"id\": \"%s\", \"type\": \"%s\", \"delta\": %v}", k, types.Counter, v)
+					cdata, err := Compress([]byte(data))
+					if err != nil {
+						log.Println(err)
+						return
+					}
 					_, err = client.R().
 						SetHeader("Content-Type", "application/json").
-						SetBody(map[string]interface{}{"id": k, "type": types.Counter, "delta": v}).
+						SetBody(cdata).
 						Post(fmt.Sprintf("http://%s/update/", cfg.ServerAddr))
 					if err != nil {
 						log.Println(err)
@@ -97,4 +112,21 @@ func main() {
 	<-sig
 
 	cancelFunc()
+}
+
+// Compress сжимает слайс байт.
+func Compress(data []byte) ([]byte, error) {
+	var b bytes.Buffer
+	w := gzip.NewWriter(&b)
+
+	_, err := w.Write(data)
+	if err != nil {
+		return nil, fmt.Errorf("failed write data to compress temporary buffer: %v", err)
+	}
+	err = w.Close()
+	if err != nil {
+		return nil, fmt.Errorf("failed compress data: %v", err)
+	}
+
+	return b.Bytes(), nil
 }
