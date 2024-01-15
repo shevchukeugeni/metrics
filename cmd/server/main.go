@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sync"
 
 	"github.com/caarlos0/env/v6"
 	"go.uber.org/zap"
@@ -41,13 +42,15 @@ func main() {
 
 	logger, err := zap.NewDevelopment()
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 	defer logger.Sync()
 
 	memStorage := store.NewMemStorage()
 
-	dumpWorker := store.NewDumpWorker(logger, &dcfg, memStorage)
+	var wg sync.WaitGroup
+
+	dumpWorker := store.NewDumpWorker(logger, &dcfg, memStorage, &wg)
 
 	router := server.SetupRouter(logger, memStorage, dumpWorker)
 
@@ -64,4 +67,5 @@ func main() {
 	}
 
 	cancelCtx()
+	wg.Wait()
 }

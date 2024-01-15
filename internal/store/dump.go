@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"sync"
 	"time"
 
 	"go.uber.org/zap"
@@ -17,6 +18,8 @@ type DumpWorker struct {
 	cfg      *types.DumpConfig
 	storage  *MemStorage
 	syncMode bool
+
+	wg *sync.WaitGroup
 }
 
 type dumpData struct {
@@ -29,7 +32,7 @@ type metric struct {
 	Value string `json:"value"`
 }
 
-func NewDumpWorker(logger *zap.Logger, cfg *types.DumpConfig, storage *MemStorage) *DumpWorker {
+func NewDumpWorker(logger *zap.Logger, cfg *types.DumpConfig, storage *MemStorage, wg *sync.WaitGroup) *DumpWorker {
 	if cfg.FileStoragePath == "" {
 		logger.Info("Dumping to file disabled")
 		return nil
@@ -54,15 +57,18 @@ func NewDumpWorker(logger *zap.Logger, cfg *types.DumpConfig, storage *MemStorag
 		cfg:      cfg,
 		storage:  storage,
 		syncMode: cfg.StoreInterval == 0,
+		wg:       wg,
 	}
 }
 
 func (dw *DumpWorker) Start(ctx context.Context) {
+	dw.wg.Add(1)
 	ticker := time.NewTicker(time.Duration(dw.cfg.StoreInterval) * time.Second)
 	for {
 		select {
 		case <-ctx.Done():
 			dw.dump()
+			dw.wg.Done()
 			return
 		case <-ticker.C:
 			dw.logger.Info("dumping to file")

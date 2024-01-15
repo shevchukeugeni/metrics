@@ -61,9 +61,10 @@ func SetupRouter(logger *zap.Logger, ms MetricStorage, dw *store.DumpWorker) htt
 func (ro *router) Handler() http.Handler {
 	r := chi.NewRouter()
 	r.Use(ro.WithLogging)
-	r.Get("/", gzipMiddleware(ro.getMetrics))
-	r.Post("/value/", gzipMiddleware(ro.getMetricJSON))
-	r.Post("/update/", gzipMiddleware(ro.updateMetricJSON))
+	r.Use(gzipMiddleware)
+	r.Get("/", ro.getMetrics)
+	r.Post("/value/", ro.getMetricJSON)
+	r.Post("/update/", ro.updateMetricJSON)
 	//DEPRECATED
 	r.Get("/value/{mType}/{name}", ro.getMetric)
 	r.Post("/update/{mType}/{name}/{value}", ro.updateMetric)
@@ -144,14 +145,14 @@ func (ro *router) getMetricJSON(w http.ResponseWriter, r *http.Request) {
 	if req.MType == types.Counter {
 		intValue, err := strconv.ParseInt(value, 10, 64)
 		if err != nil {
-			http.Error(w, "Can't parse data: "+err.Error(), http.StatusInternalServerError)
+			http.Error(w, "Can't parse data: "+err.Error(), http.StatusBadRequest)
 			return
 		}
 		res.Delta = &intValue
 	} else {
 		floatValue, err := strconv.ParseFloat(value, 64)
 		if err != nil {
-			http.Error(w, "Can't parse data: "+err.Error(), http.StatusInternalServerError)
+			http.Error(w, "Can't parse data: "+err.Error(), http.StatusBadRequest)
 			return
 		}
 		res.Value = &floatValue
@@ -251,7 +252,7 @@ func (ro *router) WithLogging(h http.Handler) http.Handler {
 	return http.HandlerFunc(logFn)
 }
 
-func gzipMiddleware(h http.HandlerFunc) http.HandlerFunc {
+func gzipMiddleware(h http.Handler) http.Handler {
 	gzipFunc := func(w http.ResponseWriter, r *http.Request) {
 		// по умолчанию устанавливаем оригинальный http.ResponseWriter как тот,
 		// который будем передавать следующей функции
@@ -288,7 +289,7 @@ func gzipMiddleware(h http.HandlerFunc) http.HandlerFunc {
 		h.ServeHTTP(ow, r)
 	}
 
-	return gzipFunc
+	return http.HandlerFunc(gzipFunc)
 }
 
 // DEPRECATED
