@@ -59,16 +59,18 @@ func SetupRouter(logger *zap.Logger, ms MetricStorage, dw *store.DumpWorker) htt
 }
 
 func (ro *router) Handler() http.Handler {
-	r := chi.NewRouter()
-	r.Use(ro.WithLogging)
-	r.Use(gzipMiddleware)
-	r.Get("/", ro.getMetrics)
-	r.Post("/value/", ro.getMetricJSON)
-	r.Post("/update/", ro.updateMetricJSON)
+	rtr := chi.NewRouter()
+	rtr.Use(ro.WithLogging)
+	rtr.Group(func(r chi.Router) {
+		r.Use(gzipMiddleware)
+		r.Get("/", ro.getMetrics)
+		r.Post("/value/", ro.getMetricJSON)
+		r.Post("/update/", ro.updateMetricJSON)
+	})
 	//DEPRECATED
-	r.Get("/value/{mType}/{name}", ro.getMetric)
-	r.Post("/update/{mType}/{name}/{value}", ro.updateMetric)
-	return r
+	rtr.Get("/value/{mType}/{name}", ro.getMetric)
+	rtr.Post("/update/{mType}/{name}/{value}", ro.updateMetric)
+	return rtr
 }
 
 func (ro *router) getMetrics(w http.ResponseWriter, r *http.Request) {
