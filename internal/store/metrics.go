@@ -5,16 +5,17 @@ import (
 	"math/rand"
 	"reflect"
 	"runtime"
+	"strconv"
 )
 
 type RuntimeMetrics struct {
-	Gauge   map[string]string
+	Gauge   map[string]float64
 	Counter map[string]int64
 }
 
 func NewRuntimeMetrics() *RuntimeMetrics {
 	return &RuntimeMetrics{
-		Gauge:   make(map[string]string),
+		Gauge:   make(map[string]float64),
 		Counter: make(map[string]int64),
 	}
 }
@@ -32,11 +33,15 @@ func (rm *RuntimeMetrics) Update() {
 		case "PauseNs", "PauseEnd", "BySize", "EnableGC", "DebugGC":
 			continue
 		default:
-			rm.Gauge[typesOfV.Field(i).Name] = fmt.Sprint(values.Field(i).Interface())
+			val, err := strconv.ParseFloat(fmt.Sprint(values.Field(i).Interface()), 64)
+			if err != nil {
+				continue
+			}
+			rm.Gauge[typesOfV.Field(i).Name] = val
 		}
 	}
 
-	rm.Gauge["RandomValue"] = fmt.Sprint(rand.Float64())
+	rm.Gauge["RandomValue"] = rand.Float64()
 
 	rm.Counter["PollCount"]++
 }

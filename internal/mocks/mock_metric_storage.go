@@ -63,11 +63,12 @@ func (mr *MockMetricStorageMockRecorder) GetMetrics() *gomock.Call {
 }
 
 // UpdateMetric mocks base method.
-func (m *MockMetricStorage) UpdateMetric(arg0, arg1, arg2 string) error {
+func (m *MockMetricStorage) UpdateMetric(arg0, arg1, arg2 string) (interface{}, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateMetric", arg0, arg1, arg2)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(interface{})
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // UpdateMetric indicates an expected call of UpdateMetric.
