@@ -33,8 +33,8 @@ func init() {
 		flagRunAddr = envRunAddr
 	}
 
-	if envDbUrl := os.Getenv("DATABASE_DSN"); envDbUrl != "" {
-		dbURL = envDbUrl
+	if envDBURL := os.Getenv("DATABASE_DSN"); envDBURL != "" {
+		dbURL = envDBURL
 	}
 }
 
@@ -56,7 +56,7 @@ func main() {
 
 	db, err := postgres.NewPostgresDB(postgres.Config{Url: dbURL})
 	if err != nil {
-		logger.Fatal("failed to initialize db: " + err.Error())
+		logger.Error("failed to initialize db: " + err.Error())
 	}
 	defer db.Close()
 
