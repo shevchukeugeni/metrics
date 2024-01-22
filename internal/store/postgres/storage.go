@@ -6,11 +6,11 @@ import (
 )
 
 type Config struct {
-	Url string
+	URL string
 }
 
 func NewPostgresDB(cfg Config) (*sql.DB, error) {
-	db, err := sql.Open("pgx", cfg.Url)
+	db, err := sql.Open("pgx", cfg.URL)
 	if err != nil {
 		return nil, err
 	}

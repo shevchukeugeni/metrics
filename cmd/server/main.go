@@ -54,7 +54,7 @@ func main() {
 
 	memStorage := store.NewMemStorage()
 
-	db, err := postgres.NewPostgresDB(postgres.Config{Url: dbURL})
+	db, err := postgres.NewPostgresDB(postgres.Config{URL: dbURL})
 	if err != nil {
 		logger.Error("failed to initialize db: " + err.Error())
 	}
