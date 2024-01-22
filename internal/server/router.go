@@ -1,6 +1,7 @@
 package server
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -41,6 +42,7 @@ type router struct {
 	logger *zap.Logger
 	ms     MetricStorage
 	dw     *store.DumpWorker
+	db     *sql.DB
 }
 
 type MetricStorage interface {
@@ -49,11 +51,12 @@ type MetricStorage interface {
 	UpdateMetric(mtype, name, value string) (any, error)
 }
 
-func SetupRouter(logger *zap.Logger, ms MetricStorage, dw *store.DumpWorker) http.Handler {
+func SetupRouter(logger *zap.Logger, ms MetricStorage, dw *store.DumpWorker, db *sql.DB) http.Handler {
 	ro := &router{
 		logger: logger,
 		ms:     ms,
 		dw:     dw,
+		db:     db,
 	}
 	return ro.Handler()
 }
@@ -61,6 +64,7 @@ func SetupRouter(logger *zap.Logger, ms MetricStorage, dw *store.DumpWorker) htt
 func (ro *router) Handler() http.Handler {
 	rtr := chi.NewRouter()
 	rtr.Use(ro.WithLogging)
+	rtr.Get("/ping", ro.dbPing)
 	rtr.Group(func(r chi.Router) {
 		r.Use(gzipMiddleware)
 		r.Get("/", ro.getMetrics)
@@ -334,6 +338,15 @@ func (ro *router) updateMetric(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
+func (ro *router) dbPing(w http.ResponseWriter, r *http.Request) {
+	err := ro.db.Ping()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 
 	w.WriteHeader(http.StatusOK)
