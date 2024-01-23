@@ -52,7 +52,11 @@ func main() {
 	}
 	defer logger.Sync()
 
-	memStorage := store.NewMemStorage()
+	var (
+		router http.Handler
+		wg     sync.WaitGroup
+	)
+	ctx, cancelCtx := context.WithCancel(context.Background())
 
 	db, err := postgres.NewPostgresDB(postgres.Config{URL: dbURL})
 	if err != nil {
@@ -60,16 +64,20 @@ func main() {
 	}
 	defer db.Close()
 
-	var wg sync.WaitGroup
+	if db != nil {
+		dbStorage := postgres.NewStore(logger, db)
 
-	dumpWorker := store.NewDumpWorker(logger, &dcfg, memStorage, &wg)
+		router = server.SetupRouter(logger, dbStorage, nil, db)
+	} else {
+		memStorage := store.NewMemStorage()
 
-	router := server.SetupRouter(logger, memStorage, dumpWorker, db)
+		dumpWorker := store.NewDumpWorker(logger, &dcfg, memStorage, &wg)
 
-	ctx, cancelCtx := context.WithCancel(context.Background())
+		router = server.SetupRouter(logger, memStorage, dumpWorker, nil)
 
-	if dumpWorker != nil {
-		go dumpWorker.Start(ctx)
+		if dumpWorker != nil {
+			go dumpWorker.Start(ctx)
+		}
 	}
 
 	logger.Info("Running server on", zap.String("address", flagRunAddr))
