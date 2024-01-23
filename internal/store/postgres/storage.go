@@ -44,7 +44,12 @@ func (dbs *DBStore) GetMetric(mtype string) map[string]string {
 			return nil
 		}
 
-		metrics[name] = fmt.Sprint(value)
+		switch mtype {
+		case types.Gauge:
+			metrics[name] = fmt.Sprint(value)
+		case types.Counter:
+			metrics[name] = fmt.Sprint(int64(math.Round(value)))
+		}
 	}
 
 	if err := rows.Err(); err != nil {
