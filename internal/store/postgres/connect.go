@@ -39,6 +39,9 @@ func NewPostgresDB(cfg Config) (*sql.DB, error) {
 
 func migrateDB(db *sql.DB, table string) error {
 	driver, err := migratepgx.WithInstance(db, &migratepgx.Config{MigrationsTable: table})
+	if err != nil {
+		return err
+	}
 	migrator, err := migrate.NewWithDatabaseInstance("embed://", table, driver)
 	if err != nil {
 		return err

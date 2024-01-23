@@ -47,6 +47,11 @@ func (dbs *DBStore) GetMetric(mtype string) map[string]string {
 		metrics[name] = fmt.Sprint(value)
 	}
 
+	if err := rows.Err(); err != nil {
+		dbs.logger.Error("rowserrorcheck", zap.Error(err))
+		return nil
+	}
+
 	return metrics
 }
 
@@ -76,6 +81,11 @@ func (dbs *DBStore) GetMetrics() map[string]store.Metric {
 		case types.Counter:
 			counter[name] = int64(math.Round(value))
 		}
+	}
+
+	if err := rows.Err(); err != nil {
+		dbs.logger.Error("rowserrorcheck", zap.Error(err))
+		return nil
 	}
 
 	return map[string]store.Metric{
