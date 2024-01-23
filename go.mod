@@ -3,6 +3,7 @@ module github.com/shevchukeugeni/metrics
 go 1.20
 
 require (
+	github.com/avast/retry-go v3.0.0+incompatible
 	github.com/caarlos0/env/v6 v6.10.1
 	github.com/go-chi/chi/v5 v5.0.10
 	github.com/go-resty/resty/v2 v2.10.0
