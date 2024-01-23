@@ -49,6 +49,7 @@ type MetricStorage interface {
 	GetMetrics() map[string]store.Metric
 	GetMetric(string) map[string]string
 	UpdateMetric(mtype, name, value string) (any, error)
+	UpdateMetrics([]types.Metrics) error
 }
 
 func SetupRouter(logger *zap.Logger, ms MetricStorage, dw *store.DumpWorker, db *sql.DB) http.Handler {
@@ -70,6 +71,7 @@ func (ro *router) Handler() http.Handler {
 		r.Get("/", ro.getMetrics)
 		r.Post("/value/", ro.getMetricJSON)
 		r.Post("/update/", ro.updateMetricJSON)
+		r.Post("/updates/", ro.updateMetricsJSON)
 	})
 	//DEPRECATED
 	rtr.Get("/value/{mType}/{name}", ro.getMetric)
@@ -222,6 +224,30 @@ func (ro *router) updateMetricJSON(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Can't marshal data: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	//If DumpWorker was initialized and run in sync mode
+	if ro.dw != nil {
+		ro.dw.DumpSync()
+	}
+}
+
+func (ro *router) updateMetricsJSON(w http.ResponseWriter, r *http.Request) {
+	var req []types.Metrics
+
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		http.Error(w, "Unable to decode json: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	err = ro.ms.UpdateMetrics(req)
+	if err != nil {
+		http.Error(w, "Unable to update batch: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 
 	//If DumpWorker was initialized and run in sync mode
 	if ro.dw != nil {

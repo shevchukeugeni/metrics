@@ -95,6 +95,58 @@ func (dbs *DBStore) GetMetrics() map[string]store.Metric {
 }
 
 func (dbs *DBStore) UpdateMetric(mtype, name, value string) (any, error) {
+	tx, err := dbs.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	val, err := updateMetric(tx, mtype, name, value)
+	if err != nil {
+		if err2 := tx.Rollback(); err2 != nil {
+			dbs.logger.Error("tx rollback err", zap.Error(err2))
+		}
+		return nil, err
+	}
+	if err2 := tx.Commit(); err2 != nil {
+		dbs.logger.Error("tx commit err", zap.Error(err2))
+		return nil, err2
+	}
+	return val, nil
+}
+
+func (dbs *DBStore) UpdateMetrics(metrics []types.Metrics) error {
+	tx, err := dbs.db.Begin()
+	if err != nil {
+		return err
+	}
+
+	for _, mtr := range metrics {
+		var val string
+		switch mtr.MType {
+		case types.Gauge:
+			val = fmt.Sprint(*mtr.Value)
+		case types.Counter:
+			val = fmt.Sprint(*mtr.Delta)
+		default:
+			return types.ErrUnknownType
+		}
+		_, err = updateMetric(tx, mtr.MType, mtr.ID, val)
+		if err != nil {
+			if err2 := tx.Rollback(); err2 != nil {
+				dbs.logger.Error("tx rollback err", zap.Error(err2))
+			}
+			return err
+		}
+	}
+
+	if err2 := tx.Commit(); err2 != nil {
+		dbs.logger.Error("tx commit err", zap.Error(err2))
+		return err2
+	}
+
+	return nil
+}
+
+func updateMetric(tx *sql.Tx, mtype, name, value string) (any, error) {
 	switch mtype {
 	case types.Gauge:
 		fValue, err := strconv.ParseFloat(value, 64)
@@ -106,7 +158,7 @@ func (dbs *DBStore) UpdateMetric(mtype, name, value string) (any, error) {
 			return nil, errors.New("incorrect name")
 		}
 
-		_, err = dbs.db.Exec("INSERT INTO metrics (type,name,value) VALUES ($1,$2,$3) "+
+		_, err = tx.Exec("INSERT INTO metrics (type,name,value) VALUES ($1,$2,$3) "+
 			"ON CONFLICT ON CONSTRAINT metric_unique "+
 			"DO UPDATE SET value=EXCLUDED.value;", mtype, name, fValue)
 		if err != nil {
@@ -124,7 +176,7 @@ func (dbs *DBStore) UpdateMetric(mtype, name, value string) (any, error) {
 			return nil, errors.New("incorrect name")
 		}
 
-		row := dbs.db.QueryRow("SELECT value FROM metrics WHERE type=$1 and name=$2;", mtype, name)
+		row := tx.QueryRow("SELECT value FROM metrics WHERE type=$1 and name=$2;", mtype, name)
 		var (
 			val float64
 		)
@@ -132,7 +184,7 @@ func (dbs *DBStore) UpdateMetric(mtype, name, value string) (any, error) {
 		err = row.Scan(&val)
 		if err != nil {
 			if err == sql.ErrNoRows {
-				_, err = dbs.db.Exec("INSERT INTO metrics (type,name,value) VALUES ($1,$2,$3);", mtype, name, iValue)
+				_, err = tx.Exec("INSERT INTO metrics (type,name,value) VALUES ($1,$2,$3);", mtype, name, iValue)
 				if err != nil {
 					return nil, err
 				}
@@ -142,7 +194,7 @@ func (dbs *DBStore) UpdateMetric(mtype, name, value string) (any, error) {
 			}
 		}
 
-		_, err = dbs.db.Exec("UPDATE metrics SET value=$1 WHERE type=$2 and name =$3;",
+		_, err = tx.Exec("UPDATE metrics SET value=$1 WHERE type=$2 and name =$3;",
 			int64(math.Round(val))+iValue, mtype, name)
 		if err != nil {
 			return nil, err
@@ -150,6 +202,6 @@ func (dbs *DBStore) UpdateMetric(mtype, name, value string) (any, error) {
 
 		return int64(math.Round(val)) + iValue, nil
 	default:
-		return nil, errors.New("unknown metric type")
+		return nil, types.ErrUnknownType
 	}
 }
