@@ -112,7 +112,7 @@ func main() {
 						return innerErr
 					}
 					return nil
-				}, fmt.Sprint("failed to send metric"))
+				}, "failed to send metric")
 				if err != nil {
 					log.Println(err)
 				}
