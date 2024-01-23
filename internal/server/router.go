@@ -219,7 +219,7 @@ func (ro *router) updateMetricJSON(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			return nil
-		}, fmt.Sprint("failed to update metric"))
+		}, "failed to update metric")
 		if err != nil {
 			http.Error(w, "incorrect metric value", http.StatusBadRequest)
 			return
@@ -247,7 +247,7 @@ func (ro *router) updateMetricJSON(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			return nil
-		}, fmt.Sprint("failed to update metric"))
+		}, "failed to update metric")
 		if err != nil {
 			http.Error(w, "incorrect metric value", http.StatusBadRequest)
 			return
@@ -299,7 +299,7 @@ func (ro *router) updateMetricsJSON(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		return nil
-	}, fmt.Sprint("failed to update metrics"))
+	}, "failed to update metrics")
 	if err != nil {
 		http.Error(w, "Unable to update batch: "+err.Error(), http.StatusBadRequest)
 		return
