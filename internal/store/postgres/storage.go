@@ -114,10 +114,6 @@ func (dbs *DBStore) UpdateMetric(mtype, name, value string) (any, error) {
 }
 
 func (dbs *DBStore) UpdateMetrics(metrics []types.Metrics) error {
-	tx, err := dbs.db.Begin()
-	if err != nil {
-		return err
-	}
 
 	for _, mtr := range metrics {
 		var val string
@@ -129,6 +125,11 @@ func (dbs *DBStore) UpdateMetrics(metrics []types.Metrics) error {
 		default:
 			return types.ErrUnknownType
 		}
+
+		tx, err := dbs.db.Begin()
+		if err != nil {
+			return err
+		}
 		_, err = updateMetric(tx, mtr.MType, mtr.ID, val)
 		if err != nil {
 			if err2 := tx.Rollback(); err2 != nil {
@@ -136,11 +137,10 @@ func (dbs *DBStore) UpdateMetrics(metrics []types.Metrics) error {
 			}
 			return err
 		}
-	}
-
-	if err2 := tx.Commit(); err2 != nil {
-		dbs.logger.Error("tx commit err", zap.Error(err2))
-		return err2
+		if err2 := tx.Commit(); err2 != nil {
+			dbs.logger.Error("tx commit err", zap.Error(err2))
+			return err2
+		}
 	}
 
 	return nil
