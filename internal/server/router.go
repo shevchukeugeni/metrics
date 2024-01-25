@@ -436,6 +436,7 @@ func (ro *router) dbPing(w http.ResponseWriter, r *http.Request) {
 	err := ro.db.Ping()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	w.WriteHeader(http.StatusOK)

@@ -115,6 +115,7 @@ func main() {
 				}, "failed to send metric")
 				if err != nil {
 					log.Println(err)
+					return
 				}
 
 				log.Println("Report is sent!")

@@ -188,7 +188,7 @@ func updateMetric(tx *sql.Tx, mtype, name, value string) (any, error) {
 
 		err = row.Scan(&val)
 		if err != nil {
-			if err == sql.ErrNoRows {
+			if errors.Is(err, sql.ErrNoRows) {
 				_, err = tx.Exec("INSERT INTO metrics (type,name,value) VALUES ($1,$2,$3);", mtype, name, iValue)
 				if err != nil {
 					return nil, err
