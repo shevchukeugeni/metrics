@@ -9,6 +9,7 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	store "github.com/shevchukeugeni/metrics/internal/store"
+	types "github.com/shevchukeugeni/metrics/internal/types"
 )
 
 // MockMetricStorage is a mock of MetricStorage interface.
@@ -75,4 +76,18 @@ func (m *MockMetricStorage) UpdateMetric(arg0, arg1, arg2 string) (interface{}, 
 func (mr *MockMetricStorageMockRecorder) UpdateMetric(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateMetric", reflect.TypeOf((*MockMetricStorage)(nil).UpdateMetric), arg0, arg1, arg2)
+}
+
+// UpdateMetrics mocks base method.
+func (m *MockMetricStorage) UpdateMetrics(arg0 []types.Metrics) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateMetrics", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateMetrics indicates an expected call of UpdateMetrics.
+func (mr *MockMetricStorageMockRecorder) UpdateMetrics(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateMetrics", reflect.TypeOf((*MockMetricStorage)(nil).UpdateMetrics), arg0)
 }

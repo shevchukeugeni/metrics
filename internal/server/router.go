@@ -1,14 +1,17 @@
 package server
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/jackc/pgerrcode"
 	"html/template"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/avast/retry-go"
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 
@@ -41,31 +44,47 @@ type router struct {
 	logger *zap.Logger
 	ms     MetricStorage
 	dw     *store.DumpWorker
+	db     *sql.DB
 }
 
 type MetricStorage interface {
 	GetMetrics() map[string]store.Metric
 	GetMetric(string) map[string]string
 	UpdateMetric(mtype, name, value string) (any, error)
+	UpdateMetrics([]types.Metrics) error
 }
 
-func SetupRouter(logger *zap.Logger, ms MetricStorage, dw *store.DumpWorker) http.Handler {
+func SetupRouter(logger *zap.Logger, ms MetricStorage, dw *store.DumpWorker, db *sql.DB) http.Handler {
 	ro := &router{
 		logger: logger,
 		ms:     ms,
 		dw:     dw,
+		db:     db,
 	}
 	return ro.Handler()
+}
+
+func (ro *router) WithRetry(fn func() error, warn string) error {
+	interval := time.Second
+	return retry.Do(fn,
+		retry.Attempts(3),
+		retry.Delay(interval),
+		retry.OnRetry(func(n uint, err error) {
+			ro.logger.Warn(warn, zap.Uint("attempt", n), zap.Error(err))
+			interval += 2 * time.Second
+		}))
 }
 
 func (ro *router) Handler() http.Handler {
 	rtr := chi.NewRouter()
 	rtr.Use(ro.WithLogging)
+	rtr.Get("/ping", ro.dbPing)
 	rtr.Group(func(r chi.Router) {
 		r.Use(gzipMiddleware)
 		r.Get("/", ro.getMetrics)
 		r.Post("/value/", ro.getMetricJSON)
 		r.Post("/update/", ro.updateMetricJSON)
+		r.Post("/updates/", ro.updateMetricsJSON)
 	})
 	//DEPRECATED
 	rtr.Get("/value/{mType}/{name}", ro.getMetric)
@@ -178,6 +197,11 @@ func (ro *router) updateMetricJSON(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var (
+		newValue any
+		innerErr error
+	)
+
 	switch req.MType {
 	case types.Counter:
 		if req.Delta == nil {
@@ -185,9 +209,23 @@ func (ro *router) updateMetricJSON(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		newValue, err := ro.ms.UpdateMetric(req.MType, req.ID, fmt.Sprint(*req.Delta))
+		err = ro.WithRetry(func() error {
+			newValue, innerErr = ro.ms.UpdateMetric(req.MType, req.ID, fmt.Sprint(*req.Delta))
+			if innerErr != nil {
+				if innerErr.Error() == pgerrcode.UniqueViolation {
+					return innerErr
+				} else {
+					return nil
+				}
+			}
+			return nil
+		}, "failed to update metric")
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			http.Error(w, "incorrect metric value", http.StatusBadRequest)
+			return
+		}
+		if innerErr != nil {
+			http.Error(w, innerErr.Error(), http.StatusBadRequest)
 			return
 		}
 
@@ -199,11 +237,26 @@ func (ro *router) updateMetricJSON(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		newValue, err := ro.ms.UpdateMetric(req.MType, req.ID, fmt.Sprint(*req.Value))
+		err = ro.WithRetry(func() error {
+			newValue, innerErr = ro.ms.UpdateMetric(req.MType, req.ID, fmt.Sprint(*req.Value))
+			if innerErr != nil {
+				if innerErr.Error() == pgerrcode.UniqueViolation {
+					return innerErr
+				} else {
+					return nil
+				}
+			}
+			return nil
+		}, "failed to update metric")
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			http.Error(w, "incorrect metric value", http.StatusBadRequest)
 			return
 		}
+		if innerErr != nil {
+			http.Error(w, innerErr.Error(), http.StatusBadRequest)
+			return
+		}
+
 		value := newValue.(float64)
 		req.Value = &value
 	default:
@@ -218,6 +271,46 @@ func (ro *router) updateMetricJSON(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Can't marshal data: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	//If DumpWorker was initialized and run in sync mode
+	if ro.dw != nil {
+		ro.dw.DumpSync()
+	}
+}
+
+func (ro *router) updateMetricsJSON(w http.ResponseWriter, r *http.Request) {
+	var req []types.Metrics
+
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		http.Error(w, "Unable to decode json: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	var innerErr error
+
+	err = ro.WithRetry(func() error {
+		innerErr = ro.ms.UpdateMetrics(req)
+		if innerErr != nil {
+			if innerErr.Error() == pgerrcode.UniqueViolation {
+				return innerErr
+			} else {
+				return nil
+			}
+		}
+		return nil
+	}, "failed to update metrics")
+	if err != nil {
+		http.Error(w, "Unable to update batch: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if innerErr != nil {
+		http.Error(w, "Unable to update batch: "+innerErr.Error(), http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 
 	//If DumpWorker was initialized and run in sync mode
 	if ro.dw != nil {
@@ -333,6 +426,16 @@ func (ro *router) updateMetric(w http.ResponseWriter, r *http.Request) {
 	_, err := ro.ms.UpdateMetric(mType, name, value)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
+func (ro *router) dbPing(w http.ResponseWriter, r *http.Request) {
+	err := ro.db.Ping()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 

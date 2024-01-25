@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/avast/retry-go"
 	"github.com/shevchukeugeni/metrics/internal/types"
+	"go.uber.org/zap"
 	"log"
 	"os"
 	"os/signal"
@@ -68,39 +71,51 @@ func main() {
 
 				log.Println("Metrics are updated")
 			case <-reportTicker.C:
-				for k, v := range metrics.Gauge {
-					data := fmt.Sprintf("{\"id\": \"%s\", \"type\": \"%s\", \"value\": %v}", k, types.Gauge, v)
-					cdata, err := Compress([]byte(data))
-					if err != nil {
-						log.Println(err)
-						return
-					}
+				type mtrc struct {
+					ID    string  `json:"id"`
+					Mtype string  `json:"type"`
+					Value float64 `json:"value"`
+					Delta int64   `json:"delta"`
+				}
 
-					_, err = client.R().
-						SetHeader("Content-Type", "application/json").
-						SetHeader("Content-Encoding", "gzip").
-						SetBody(cdata).
-						Post(fmt.Sprintf("http://%s/update/", cfg.ServerAddr))
-					if err != nil {
-						log.Println(err)
-					}
+				var mtrcs []mtrc
+
+				for k, v := range metrics.Gauge {
+					mtrcs = append(mtrcs, mtrc{ID: k, Mtype: types.Gauge, Value: v})
 				}
 
 				for k, v := range metrics.Counter {
-					data := fmt.Sprintf("{\"id\": \"%s\", \"type\": \"%s\", \"delta\": %v}", k, types.Counter, v)
-					cdata, err := Compress([]byte(data))
-					if err != nil {
-						log.Println(err)
-						return
-					}
-					_, err = client.R().
+					mtrcs = append(mtrcs, mtrc{ID: k, Mtype: types.Counter, Delta: v})
+				}
+
+				data, err := json.Marshal(mtrcs)
+				if err != nil {
+					log.Println(err)
+					return
+				}
+
+				cdata, err := Compress(data)
+				if err != nil {
+					log.Println(err)
+					return
+				}
+
+				var innerErr error
+
+				err = WithRetry(func() error {
+					_, innerErr = client.R().
 						SetHeader("Content-Type", "application/json").
 						SetHeader("Content-Encoding", "gzip").
 						SetBody(cdata).
-						Post(fmt.Sprintf("http://%s/update/", cfg.ServerAddr))
-					if err != nil {
-						log.Println(err)
+						Post(fmt.Sprintf("http://%s/updates/", cfg.ServerAddr))
+					if innerErr != nil {
+						return innerErr
 					}
+					return nil
+				}, "failed to send metric")
+				if err != nil {
+					log.Println(err)
+					return
 				}
 
 				log.Println("Report is sent!")
@@ -130,4 +145,15 @@ func Compress(data []byte) ([]byte, error) {
 	}
 
 	return b.Bytes(), nil
+}
+
+func WithRetry(fn func() error, warn string) error {
+	interval := time.Second
+	return retry.Do(fn,
+		retry.Attempts(3),
+		retry.Delay(interval),
+		retry.OnRetry(func(n uint, err error) {
+			log.Println(warn, zap.Uint("attempt", n), zap.Error(err))
+			interval += 2 * time.Second
+		}))
 }

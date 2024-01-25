@@ -13,12 +13,13 @@ import (
 
 	"github.com/shevchukeugeni/metrics/internal/server"
 	"github.com/shevchukeugeni/metrics/internal/store"
+	"github.com/shevchukeugeni/metrics/internal/store/postgres"
 	"github.com/shevchukeugeni/metrics/internal/types"
 )
 
 var dcfg types.DumpConfig
 
-var flagRunAddr string
+var flagRunAddr, dbURL string
 
 func init() {
 	flag.UintVar(&dcfg.StoreInterval, "i", 300, "dump to file interval")
@@ -26,9 +27,14 @@ func init() {
 	flag.StringVar(&dcfg.FileStoragePath, "f", "/tmp/metrics-db.json", "dump file path")
 
 	flag.StringVar(&flagRunAddr, "a", "localhost:8080", "address and port to run server")
+	flag.StringVar(&dbURL, "d", "", "database connection url")
 
 	if envRunAddr := os.Getenv("ADDRESS"); envRunAddr != "" {
 		flagRunAddr = envRunAddr
+	}
+
+	if envDBURL := os.Getenv("DATABASE_DSN"); envDBURL != "" {
+		dbURL = envDBURL
 	}
 }
 
@@ -46,18 +52,32 @@ func main() {
 	}
 	defer logger.Sync()
 
-	memStorage := store.NewMemStorage()
-
-	var wg sync.WaitGroup
-
-	dumpWorker := store.NewDumpWorker(logger, &dcfg, memStorage, &wg)
-
-	router := server.SetupRouter(logger, memStorage, dumpWorker)
-
+	var (
+		router http.Handler
+		wg     sync.WaitGroup
+	)
 	ctx, cancelCtx := context.WithCancel(context.Background())
 
-	if dumpWorker != nil {
-		go dumpWorker.Start(ctx)
+	db, err := postgres.NewPostgresDB(postgres.Config{URL: dbURL})
+	if err != nil {
+		logger.Error("failed to initialize db: " + err.Error())
+	}
+	defer db.Close()
+
+	if db != nil {
+		dbStorage := postgres.NewStore(logger, db)
+
+		router = server.SetupRouter(logger, dbStorage, nil, db)
+	} else {
+		memStorage := store.NewMemStorage()
+
+		dumpWorker := store.NewDumpWorker(logger, &dcfg, memStorage, &wg)
+
+		router = server.SetupRouter(logger, memStorage, dumpWorker, nil)
+
+		if dumpWorker != nil {
+			go dumpWorker.Start(ctx)
+		}
 	}
 
 	logger.Info("Running server on", zap.String("address", flagRunAddr))

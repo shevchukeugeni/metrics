@@ -22,11 +22,11 @@ func NewMemStorage() *MemStorage {
 }
 
 func (ms *MemStorage) GetMetric(mtype string) map[string]string {
-	metric, ok := ms.metrics[mtype]
+	mtrc, ok := ms.metrics[mtype]
 	if !ok {
 		return nil
 	} else {
-		return metric.Get()
+		return mtrc.Get()
 	}
 }
 
@@ -35,12 +35,48 @@ func (ms *MemStorage) GetMetrics() map[string]Metric {
 }
 
 func (ms *MemStorage) UpdateMetric(mtype, name, value string) (any, error) {
-	metric, ok := ms.metrics[mtype]
+	mtrc, ok := ms.metrics[mtype]
 	if !ok {
 		return nil, types.ErrUnknownType
 	}
 
-	return metric.Update(name, value)
+	return mtrc.Update(name, value)
+}
+
+func (ms *MemStorage) UpdateMetrics(metrics []types.Metrics) error {
+	for _, mtr := range metrics {
+		switch mtr.MType {
+		case types.Gauge:
+			if mtr.Value == nil {
+				return errors.New("empty metric value")
+			}
+			mtrc, ok := ms.metrics[mtr.MType]
+			if !ok {
+				return types.ErrUnknownType
+			}
+
+			_, err := mtrc.Update(mtr.ID, fmt.Sprint(*mtr.Value))
+			if err != nil {
+				return err
+			}
+		case types.Counter:
+			if mtr.Delta == nil {
+				return errors.New("empty metric value")
+			}
+			mtrc, ok := ms.metrics[mtr.MType]
+			if !ok {
+				return types.ErrUnknownType
+			}
+
+			_, err := mtrc.Update(mtr.ID, fmt.Sprint(*mtr.Delta))
+			if err != nil {
+				return err
+			}
+		default:
+			return errors.New("unknown metric type")
+		}
+	}
+	return nil
 }
 
 type Metric interface {
