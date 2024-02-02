@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -26,6 +29,7 @@ type Config struct {
 	ServerAddr     string `env:"ADDRESS"`
 	PollInterval   int    `env:"REPORT_INTERVAL"`
 	ReportInterval int    `env:"POLL_INTERVAL"`
+	SignKey        string `env:"KEY"`
 }
 
 var cfg Config
@@ -34,6 +38,7 @@ func init() {
 	flag.StringVar(&cfg.ServerAddr, "a", "localhost:8080", "address and port to run server")
 	flag.IntVar(&cfg.ReportInterval, "r", 10, "report interval in seconds")
 	flag.IntVar(&cfg.PollInterval, "p", 2, "poll interval in seconds")
+	flag.StringVar(&cfg.SignKey, "k", "", "hash signing key")
 }
 
 func main() {
@@ -43,6 +48,8 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	var sign = cfg.SignKey != ""
 
 	// NOTE: I think it's necessary to check, but autotests suite fails then
 	//_, err := net.DialTimeout("tcp", flagRunAddr, 1*time.Second)
@@ -100,14 +107,21 @@ func main() {
 					return
 				}
 
+				req := client.R().
+					SetHeader("Content-Type", "application/json").
+					SetHeader("Content-Encoding", "gzip")
+
+				if sign {
+					h := hmac.New(sha256.New, []byte(cfg.SignKey))
+					h.Write(cdata)
+					b := base64.StdEncoding.EncodeToString(h.Sum(nil))
+					req.SetHeader("HashSHA256", b)
+				}
+
 				var innerErr error
 
 				err = WithRetry(func() error {
-					_, innerErr = client.R().
-						SetHeader("Content-Type", "application/json").
-						SetHeader("Content-Encoding", "gzip").
-						SetBody(cdata).
-						Post(fmt.Sprintf("http://%s/updates/", cfg.ServerAddr))
+					_, innerErr = req.SetBody(cdata).Post(fmt.Sprintf("http://%s/updates/", cfg.ServerAddr))
 					if innerErr != nil {
 						return innerErr
 					}
@@ -115,7 +129,6 @@ func main() {
 				}, "failed to send metric")
 				if err != nil {
 					log.Println(err)
-					return
 				}
 
 				log.Println("Report is sent!")
