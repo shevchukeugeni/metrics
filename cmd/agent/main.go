@@ -10,8 +10,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"github.com/avast/retry-go"
-	"github.com/shevchukeugeni/metrics/internal/types"
 	"go.uber.org/zap"
 	"log"
 	"os"
@@ -19,10 +17,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/avast/retry-go"
 	"github.com/caarlos0/env/v6"
 	"github.com/go-resty/resty/v2"
 
 	"github.com/shevchukeugeni/metrics/internal/store"
+	"github.com/shevchukeugeni/metrics/internal/types"
 )
 
 type Config struct {
@@ -113,7 +113,7 @@ func main() {
 
 				if sign {
 					h := hmac.New(sha256.New, []byte(cfg.SignKey))
-					h.Write(cdata)
+					h.Write(data)
 					b := base64.StdEncoding.EncodeToString(h.Sum(nil))
 					req.SetHeader("HashSHA256", b)
 				}
