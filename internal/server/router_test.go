@@ -35,7 +35,7 @@ func Test_router_updateMetric(t *testing.T) {
 	mockStorage.EXPECT().UpdateMetric("gauge", "test", "1").Return(float64(2), nil).Times(1)
 	mockStorage.EXPECT().UpdateMetric("gauge", "test", "2").Return(nil, errors.New("Bad request")).Times(1)
 
-	ts := httptest.NewServer(SetupRouter(logger, mockStorage, nil, nil))
+	ts := httptest.NewServer(SetupRouter(logger, mockStorage, nil, nil, ""))
 	defer ts.Close()
 
 	tests := []struct {
@@ -204,7 +204,7 @@ func Test_router_getMetrics(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ts := httptest.NewServer(SetupRouter(logger, tt.storage, nil, nil))
+			ts := httptest.NewServer(SetupRouter(logger, tt.storage, nil, nil, ""))
 			defer ts.Close()
 
 			res, body := testRequest(t, ts, tt.method, "/", nil)
@@ -239,7 +239,7 @@ func Test_router_getMetric(t *testing.T) {
 			"test2": "2.22",
 		}).Times(1)
 
-	ts := httptest.NewServer(SetupRouter(logger, mockStorage, nil, nil))
+	ts := httptest.NewServer(SetupRouter(logger, mockStorage, nil, nil, ""))
 	defer ts.Close()
 
 	tests := []struct {

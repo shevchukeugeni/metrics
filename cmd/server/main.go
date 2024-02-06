@@ -19,7 +19,7 @@ import (
 
 var dcfg types.DumpConfig
 
-var flagRunAddr, dbURL string
+var flagRunAddr, dbURL, signingKey string
 
 func init() {
 	flag.UintVar(&dcfg.StoreInterval, "i", 300, "dump to file interval")
@@ -29,12 +29,18 @@ func init() {
 	flag.StringVar(&flagRunAddr, "a", "localhost:8080", "address and port to run server")
 	flag.StringVar(&dbURL, "d", "", "database connection url")
 
+	flag.StringVar(&dbURL, "k", "", "hash signing key")
+
 	if envRunAddr := os.Getenv("ADDRESS"); envRunAddr != "" {
 		flagRunAddr = envRunAddr
 	}
 
 	if envDBURL := os.Getenv("DATABASE_DSN"); envDBURL != "" {
 		dbURL = envDBURL
+	}
+
+	if key := os.Getenv("KEY"); key != "" {
+		signingKey = key
 	}
 }
 
@@ -67,13 +73,13 @@ func main() {
 	if db != nil {
 		dbStorage := postgres.NewStore(logger, db)
 
-		router = server.SetupRouter(logger, dbStorage, nil, db)
+		router = server.SetupRouter(logger, dbStorage, nil, db, signingKey)
 	} else {
 		memStorage := store.NewMemStorage()
 
 		dumpWorker := store.NewDumpWorker(logger, &dcfg, memStorage, &wg)
 
-		router = server.SetupRouter(logger, memStorage, dumpWorker, nil)
+		router = server.SetupRouter(logger, memStorage, dumpWorker, nil, signingKey)
 
 		if dumpWorker != nil {
 			go dumpWorker.Start(ctx)

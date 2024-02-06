@@ -1,11 +1,15 @@
 package server
 
 import (
+	"bytes"
+	"crypto/hmac"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"github.com/jackc/pgerrcode"
 	"html/template"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -13,6 +17,7 @@ import (
 
 	"github.com/avast/retry-go"
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgerrcode"
 	"go.uber.org/zap"
 
 	"github.com/shevchukeugeni/metrics/internal/store"
@@ -41,10 +46,11 @@ const tpl = `
 </html>`
 
 type router struct {
-	logger *zap.Logger
-	ms     MetricStorage
-	dw     *store.DumpWorker
-	db     *sql.DB
+	logger  *zap.Logger
+	ms      MetricStorage
+	dw      *store.DumpWorker
+	db      *sql.DB
+	signKey string
 }
 
 type MetricStorage interface {
@@ -54,12 +60,17 @@ type MetricStorage interface {
 	UpdateMetrics([]types.Metrics) error
 }
 
-func SetupRouter(logger *zap.Logger, ms MetricStorage, dw *store.DumpWorker, db *sql.DB) http.Handler {
+func SetupRouter(logger *zap.Logger,
+	ms MetricStorage,
+	dw *store.DumpWorker,
+	db *sql.DB,
+	signKey string) http.Handler {
 	ro := &router{
-		logger: logger,
-		ms:     ms,
-		dw:     dw,
-		db:     db,
+		logger:  logger,
+		ms:      ms,
+		dw:      dw,
+		db:      db,
+		signKey: signKey,
 	}
 	return ro.Handler()
 }
@@ -81,6 +92,7 @@ func (ro *router) Handler() http.Handler {
 	rtr.Get("/ping", ro.dbPing)
 	rtr.Group(func(r chi.Router) {
 		r.Use(gzipMiddleware)
+		r.Use(ro.signMiddleware)
 		r.Get("/", ro.getMetrics)
 		r.Post("/value/", ro.getMetricJSON)
 		r.Post("/update/", ro.updateMetricJSON)
@@ -385,6 +397,55 @@ func gzipMiddleware(h http.Handler) http.Handler {
 	}
 
 	return http.HandlerFunc(gzipFunc)
+}
+
+func (ro *router) signMiddleware(h http.Handler) http.Handler {
+	signFunc := func(w http.ResponseWriter, r *http.Request) {
+		// по умолчанию устанавливаем оригинальный http.ResponseWriter как тот,
+		// который будем передавать следующей функции
+		ow := w
+
+		if ro.signKey != "" && r.Method == http.MethodPost && r.Header.Get("HashSHA256") != "" {
+			reqSign := r.Header.Get("HashSHA256")
+			b, err := io.ReadAll(r.Body)
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				io.Copy(w, r.Body)
+				return
+			}
+			r.Body.Close()
+			r.Body = io.NopCloser(bytes.NewBuffer(b))
+
+			reqB, err := base64.StdEncoding.DecodeString(reqSign)
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				io.Copy(w, r.Body)
+				return
+			}
+
+			hash := hmac.New(sha256.New, []byte(ro.signKey))
+			hash.Write(b)
+			sign := hash.Sum(nil)
+			signStr := base64.StdEncoding.EncodeToString(sign)
+			fmt.Println(signStr)
+			if !hmac.Equal(sign, reqB) {
+				w.WriteHeader(http.StatusBadRequest)
+				io.Copy(w, r.Body)
+				return
+			}
+
+			sw := SigningResponseWriter{
+				ResponseWriter: w,
+				key:            ro.signKey,
+			}
+
+			ow = &sw
+		}
+
+		h.ServeHTTP(ow, r)
+	}
+
+	return http.HandlerFunc(signFunc)
 }
 
 // DEPRECATED

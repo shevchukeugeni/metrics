@@ -4,28 +4,35 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"flag"
 	"fmt"
-	"github.com/avast/retry-go"
-	"github.com/shevchukeugeni/metrics/internal/types"
-	"go.uber.org/zap"
 	"log"
 	"os"
 	"os/signal"
+	"runtime"
+	"sync"
 	"syscall"
 	"time"
 
+	"github.com/avast/retry-go"
 	"github.com/caarlos0/env/v6"
 	"github.com/go-resty/resty/v2"
+	"go.uber.org/zap"
 
 	"github.com/shevchukeugeni/metrics/internal/store"
+	"github.com/shevchukeugeni/metrics/internal/types"
 )
 
 type Config struct {
 	ServerAddr     string `env:"ADDRESS"`
 	PollInterval   int    `env:"REPORT_INTERVAL"`
 	ReportInterval int    `env:"POLL_INTERVAL"`
+	SignKey        string `env:"KEY"`
+	RateLimit      int    `env:"RATE_LIMIT"`
 }
 
 var cfg Config
@@ -34,6 +41,8 @@ func init() {
 	flag.StringVar(&cfg.ServerAddr, "a", "localhost:8080", "address and port to run server")
 	flag.IntVar(&cfg.ReportInterval, "r", 10, "report interval in seconds")
 	flag.IntVar(&cfg.PollInterval, "p", 2, "poll interval in seconds")
+	flag.StringVar(&cfg.SignKey, "k", "", "hash signing key")
+	flag.IntVar(&cfg.RateLimit, "l", runtime.GOMAXPROCS(0), "set worker number")
 }
 
 func main() {
@@ -44,13 +53,17 @@ func main() {
 		log.Fatal(err)
 	}
 
+	if cfg.RateLimit < 1 {
+		cfg.RateLimit = 1
+	}
+
 	// NOTE: I think it's necessary to check, but autotests suite fails then
 	//_, err := net.DialTimeout("tcp", flagRunAddr, 1*time.Second)
 	//if err != nil {
 	//	log.Fatalf("%s %s %s\n", flagRunAddr, "not responding", err.Error())
 	//}
 
-	metrics := store.NewRuntimeMetrics()
+	metrics := store.NewMetrics()
 
 	pollTicker := time.NewTicker(time.Duration(cfg.PollInterval) * time.Second)
 	defer pollTicker.Stop()
@@ -67,58 +80,34 @@ func main() {
 			case <-ctx.Done():
 				return
 			case <-pollTicker.C:
-				metrics.Update()
+				wg := new(sync.WaitGroup)
+				wg.Add(1)
+				go metrics.UpdateRuntime(wg)
 
+				wg.Add(1)
+				go metrics.UpdateMemory(wg)
+
+				wg.Wait()
 				log.Println("Metrics are updated")
+			}
+		}
+	}(ctx)
+
+	const numJobs = 5
+	// создаем буферизованный канал для принятия задач в воркер
+	jobs := make(chan struct{}, numJobs)
+
+	for w := 0; w <= cfg.RateLimit; w++ {
+		go worker(jobs, client, metrics)
+	}
+
+	go func(ctx context.Context) {
+		for {
+			select {
+			case <-ctx.Done():
+				return
 			case <-reportTicker.C:
-				type mtrc struct {
-					ID    string  `json:"id"`
-					Mtype string  `json:"type"`
-					Value float64 `json:"value"`
-					Delta int64   `json:"delta"`
-				}
-
-				var mtrcs []mtrc
-
-				for k, v := range metrics.Gauge {
-					mtrcs = append(mtrcs, mtrc{ID: k, Mtype: types.Gauge, Value: v})
-				}
-
-				for k, v := range metrics.Counter {
-					mtrcs = append(mtrcs, mtrc{ID: k, Mtype: types.Counter, Delta: v})
-				}
-
-				data, err := json.Marshal(mtrcs)
-				if err != nil {
-					log.Println(err)
-					return
-				}
-
-				cdata, err := Compress(data)
-				if err != nil {
-					log.Println(err)
-					return
-				}
-
-				var innerErr error
-
-				err = WithRetry(func() error {
-					_, innerErr = client.R().
-						SetHeader("Content-Type", "application/json").
-						SetHeader("Content-Encoding", "gzip").
-						SetBody(cdata).
-						Post(fmt.Sprintf("http://%s/updates/", cfg.ServerAddr))
-					if innerErr != nil {
-						return innerErr
-					}
-					return nil
-				}, "failed to send metric")
-				if err != nil {
-					log.Println(err)
-					return
-				}
-
-				log.Println("Report is sent!")
+				jobs <- struct{}{}
 			}
 		}
 	}(ctx)
@@ -128,6 +117,80 @@ func main() {
 	<-sig
 
 	cancelFunc()
+}
+
+func WithRetry(fn func() error, warn string) error {
+	interval := time.Second
+	return retry.Do(fn,
+		retry.Attempts(3),
+		retry.Delay(interval),
+		retry.OnRetry(func(n uint, err error) {
+			log.Println(warn, zap.Uint("attempt", n), zap.Error(err))
+			interval += 2 * time.Second
+		}))
+}
+
+func sendReport(client *resty.Client, metrics *store.Metrics) {
+	type mtrc struct {
+		ID    string  `json:"id"`
+		Mtype string  `json:"type"`
+		Value float64 `json:"value"`
+		Delta int64   `json:"delta"`
+	}
+
+	var mtrcs []mtrc
+
+	for k, v := range metrics.Gauge {
+		mtrcs = append(mtrcs, mtrc{ID: k, Mtype: types.Gauge, Value: v})
+	}
+
+	for k, v := range metrics.Counter {
+		mtrcs = append(mtrcs, mtrc{ID: k, Mtype: types.Counter, Delta: v})
+	}
+
+	data, err := json.Marshal(mtrcs)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	cdata, err := Compress(data)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	req := client.R().
+		SetHeader("Content-Type", "application/json").
+		SetHeader("Content-Encoding", "gzip")
+
+	if cfg.SignKey != "" {
+		h := hmac.New(sha256.New, []byte(cfg.SignKey))
+		h.Write(data)
+		b := base64.StdEncoding.EncodeToString(h.Sum(nil))
+		req.SetHeader("HashSHA256", b)
+	}
+
+	var innerErr error
+
+	err = WithRetry(func() error {
+		_, innerErr = req.SetBody(cdata).Post(fmt.Sprintf("http://%s/updates/", cfg.ServerAddr))
+		if innerErr != nil {
+			return innerErr
+		}
+		return nil
+	}, "failed to send metric")
+	if err != nil {
+		log.Println(err)
+	}
+
+	log.Println("Report is sent!")
+}
+
+func worker(jobs <-chan struct{}, client *resty.Client, metrics *store.Metrics) {
+	for range jobs {
+		sendReport(client, metrics)
+	}
 }
 
 // Compress сжимает слайс байт.
@@ -145,15 +208,4 @@ func Compress(data []byte) ([]byte, error) {
 	}
 
 	return b.Bytes(), nil
-}
-
-func WithRetry(fn func() error, warn string) error {
-	interval := time.Second
-	return retry.Do(fn,
-		retry.Attempts(3),
-		retry.Delay(interval),
-		retry.OnRetry(func(n uint, err error) {
-			log.Println(warn, zap.Uint("attempt", n), zap.Error(err))
-			interval += 2 * time.Second
-		}))
 }
